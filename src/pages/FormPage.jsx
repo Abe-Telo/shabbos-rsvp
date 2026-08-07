@@ -293,6 +293,20 @@ export default function FormPage() {
             </div>
           )}
 
+          <div className="field">
+            <label>What are you bringing this week?</label>
+            <input
+              type="text"
+              value={form.bringingDish}
+              onChange={(e) => setField('bringingDish', e.target.value)}
+              placeholder="e.g. Flo rice, challah, salad…"
+            />
+            <p className="hint" style={{ marginTop: '0.4rem', marginBottom: 0 }}>
+              This shows on the public “Food this week” list so others can see
+              what’s covered.
+            </p>
+          </div>
+
           <div className="actions">
             <button
               type="button"
@@ -440,7 +454,8 @@ export default function FormPage() {
 
           {(form.sponsorship.includes('food') ||
             form.mealStyle === 'potluck' ||
-            form.mealStyle === 'hybrid') && (
+            form.mealStyle === 'hybrid') &&
+            !form.bringingDish && (
             <div className="field">
               <label>Potluck dish description</label>
               <input

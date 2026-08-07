@@ -25,7 +25,7 @@ export default function PeoplePage() {
   }, [])
 
   const filtered = people.filter((p) => {
-    const hay = `${p.name} ${p.phone} ${p.food_prefs || ''}`.toLowerCase()
+    const hay = `${p.name} ${p.food_prefs || ''}`.toLowerCase()
     return hay.includes(q.trim().toLowerCase())
   })
 
@@ -34,9 +34,8 @@ export default function PeoplePage() {
       <section className="hero">
         <h1>People log</h1>
         <p>
-          Everyone who has ever joined — contact info, how many times they came,
-          meal style preference, and what they like eating. This list does not
-          reset on Sunday.
+          Everyone who has joined — attendance and food likes. Phone numbers are
+          private (host Admin only).
         </p>
       </section>
 
@@ -49,7 +48,7 @@ export default function PeoplePage() {
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Name, phone, food…"
+            placeholder="Name or food…"
           />
         </div>
 
@@ -63,7 +62,7 @@ export default function PeoplePage() {
             <div className="person-row" key={p.id}>
               <strong>{p.name}</strong>
               <div className="meta">
-                {p.phone || 'No phone'} · attended {p.times_attended || 0} time
+                Attended {p.times_attended || 0} time
                 {(p.times_attended || 0) === 1 ? '' : 's'}
               </div>
               {p.food_prefs && (

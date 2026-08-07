@@ -14,15 +14,32 @@ const CONTRIB_LABELS = {
   not_this_week: 'Not this week — maybe next',
   setup: 'Help with setup / cleanup',
   other: 'Other',
-  // legacy
   cant: "Can't afford this week",
   other_ways: 'Other ways',
+}
+
+function csvEscape(value) {
+  const s = String(value ?? '')
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
+function downloadCsv(filename, rows) {
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [unlocked, setUnlocked] = useState(Boolean(getAdminSession()))
   const [rows, setRows] = useState([])
+  const [people, setPeople] = useState([])
+  const [rsvps, setRsvps] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const week = currentSunday()
@@ -32,7 +49,10 @@ export default function AdminPage() {
     setError('')
     try {
       const data = await getSponsorships()
-      setRows(data)
+      const list = Array.isArray(data) ? data : data.sponsorships || []
+      setRows(list)
+      setPeople(data.people || [])
+      setRsvps(data.rsvps || [])
       setUnlocked(true)
     } catch (e) {
       clearAdminSession()
@@ -67,6 +87,65 @@ export default function AdminPage() {
     clearAdminSession()
     setUnlocked(false)
     setRows([])
+    setPeople([])
+    setRsvps([])
+  }
+
+  function exportPrivateSheet() {
+    const header = [
+      'week_start',
+      'full_name',
+      'phone',
+      'coming',
+      'meal_style',
+      'bringing_dish',
+      'food_likes',
+      'sponsorship',
+      'sponsorship_notes',
+      'guest_names',
+      'guest_count',
+      'created_at',
+    ]
+    const byId = Object.fromEntries(rows.map((s) => [s.rsvp_id, s]))
+    const lines = [header.join(',')]
+    const source = rsvps.length
+      ? rsvps
+      : rows.map((s) => ({
+          week_start: s.week_start,
+          full_name: s.full_name,
+          phone: s.phone,
+          coming: '',
+          meal_style: '',
+          bringing_dish: s.potluck_contribution,
+          food_likes: [],
+          guest_names: '',
+          guest_count: '',
+          created_at: s.created_at,
+          id: s.rsvp_id,
+        }))
+
+    for (const r of source) {
+      const s = byId[r.id] || {}
+      lines.push(
+        [
+          r.week_start,
+          r.full_name,
+          r.phone,
+          r.coming,
+          r.meal_style || r.potluck,
+          r.bringing_dish || s.potluck_contribution,
+          (r.food_likes || r.bringing || []).join('; '),
+          (s.contributions || []).join('; '),
+          s.notes || '',
+          r.guest_names,
+          r.guest_count,
+          r.created_at,
+        ]
+          .map(csvEscape)
+          .join(','),
+      )
+    }
+    downloadCsv(`shabbos-private-${week}.csv`, lines)
   }
 
   const thisWeek = rows.filter((r) => r.week_start === week)
@@ -77,8 +156,8 @@ export default function AdminPage() {
       <section className="hero">
         <h1>Admin</h1>
         <p>
-          Sponsorship and money answers are private. Unlock with the master
-          password.
+          Private host view — phones, sponsorship, and money. Not shown on the
+          public board. Export CSV to paste into your Google Sheet.
         </p>
       </section>
 
@@ -131,13 +210,42 @@ export default function AdminPage() {
             >
               Refresh
             </button>
+            <button
+              type="button"
+              className="btn btn-accent"
+              onClick={exportPrivateSheet}
+            >
+              Download Google Sheet CSV
+            </button>
           </div>
 
           {error && <div className="banner banner-err">{error}</div>}
 
           <div className="panel">
-            <h2>This week — {formatWeekLabel(week)}</h2>
-            <p className="hint">Sponsorship responses for the current Sunday week.</p>
+            <h2>Contacts (private)</h2>
+            <p className="hint">Phone numbers — host only, not on the public site.</p>
+            {people.length === 0 && (
+              <div className="empty">No contacts yet.</div>
+            )}
+            <div className="list">
+              {people.map((p) => (
+                <div className="person-row" key={p.id}>
+                  <strong>{p.name}</strong>
+                  <div className="meta">
+                    {p.phone || 'No phone'} · attended {p.times_attended || 0}{' '}
+                    time{(p.times_attended || 0) === 1 ? '' : 's'}
+                  </div>
+                  {p.food_prefs && (
+                    <div className="meta">{p.food_prefs}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel" style={{ marginTop: '1rem' }}>
+            <h2>Sponsorship — {formatWeekLabel(week)}</h2>
+            <p className="hint">Money and private notes for this week.</p>
             {loading && <p className="meta">Loading…</p>}
             {!loading && thisWeek.length === 0 && (
               <div className="empty">No sponsorship answers this week.</div>
@@ -151,7 +259,7 @@ export default function AdminPage() {
 
           {past.length > 0 && (
             <div className="panel" style={{ marginTop: '1rem' }}>
-              <h2>Past weeks</h2>
+              <h2>Past sponsorship</h2>
               <div className="list">
                 {past.map((s) => (
                   <SponsorshipRow key={s.id} s={s} />

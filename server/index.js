@@ -36,6 +36,7 @@ function digits(phone) {
 function foodPrefs(form) {
   const parts = [...(form.foodLikes || [])]
   if (form.foodLikesOther) parts.push(form.foodLikesOther)
+  if (form.bringingDish) parts.push(`Bringing: ${form.bringingDish}`)
   if (form.mealStyle) parts.push(`Style: ${form.mealStyle}`)
   if (form.mealStyleOther) parts.push(form.mealStyleOther)
   return parts.join(', ')
@@ -51,14 +52,21 @@ function currentSunday(date = new Date()) {
   return `${y}-${m}-${day}`
 }
 
-function mapRsvp(row) {
+function mapRsvpPublic(row) {
   if (!row) return null
+  const { phone, ...rest } = row
   return {
-    ...row,
+    ...rest,
     bringing: row.food_likes || [],
     bringing_other: row.food_likes_other || null,
     potluck: row.meal_style || null,
   }
+}
+
+function mapPersonPublic(row) {
+  if (!row) return null
+  const { phone, phone_digits, ...rest } = row
+  return rest
 }
 
 function upsertPerson(db, form) {
@@ -121,15 +129,15 @@ app.get('/rsvps', (req, res) => {
   const rows = db.rsvps
     .filter((r) => r.week_start === week)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
-    .map(mapRsvp)
+    .map(mapRsvpPublic)
   res.json({ week_start: week, rsvps: rows })
 })
 
 app.get('/people', (_req, res) => {
   const db = loadDb()
-  const people = [...db.people].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-  )
+  const people = [...db.people]
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    .map(mapPersonPublic)
   res.json({ people })
 })
 
@@ -149,6 +157,9 @@ app.post('/rsvps', (req, res) => {
     db.rsvps = db.rsvps.filter((r) => !oldIds.includes(r.id))
     db.sponsorships = db.sponsorships.filter((s) => !oldIds.includes(s.rsvp_id))
 
+    const dish =
+      String(form.bringingDish || form.potluckContribution || '').trim() || null
+
     const rsvpId = uuid()
     const now = new Date().toISOString()
     const rsvp = {
@@ -162,6 +173,7 @@ app.post('/rsvps', (req, res) => {
       meal_style_other: form.mealStyleOther || null,
       food_likes: form.foodLikes || [],
       food_likes_other: form.foodLikesOther || null,
+      bringing_dish: dish,
       guest_names: form.guestNames || null,
       guest_count: form.guestCount ? Number(form.guestCount) : null,
       guest_overnight: form.guestOvernight || null,
@@ -173,11 +185,7 @@ app.post('/rsvps', (req, res) => {
     }
     db.rsvps.push(rsvp)
 
-    if (
-      form.sponsorship?.length ||
-      form.sponsorshipNotes ||
-      form.potluckContribution
-    ) {
+    if (form.sponsorship?.length || form.sponsorshipNotes) {
       db.sponsorships.push({
         id: uuid(),
         rsvp_id: rsvpId,
@@ -187,13 +195,13 @@ app.post('/rsvps', (req, res) => {
         phone: form.phone.trim(),
         contributions: form.sponsorship || [],
         notes: form.sponsorshipNotes || null,
-        potluck_contribution: form.potluckContribution || null,
+        potluck_contribution: dish,
         created_at: now,
       })
     }
 
     saveDb(db)
-    res.json({ rsvp: mapRsvp(rsvp), person })
+    res.json({ rsvp: mapRsvpPublic(rsvp), person: mapPersonPublic(person) })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message || 'Server error' })
@@ -224,6 +232,12 @@ app.post('/admin/unlock', (req, res) => {
       sponsorships: [...db.sponsorships].sort((a, b) =>
         a.created_at < b.created_at ? 1 : -1,
       ),
+      people: [...db.people].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      ),
+      rsvps: [...db.rsvps].sort((a, b) =>
+        a.created_at < b.created_at ? 1 : -1,
+      ),
     })
   }
 
@@ -240,6 +254,12 @@ app.post('/admin/unlock', (req, res) => {
     token: sessionToken,
     expires_at: expires,
     sponsorships: [...db.sponsorships].sort((a, b) =>
+      a.created_at < b.created_at ? 1 : -1,
+    ),
+    people: [...db.people].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    ),
+    rsvps: [...db.rsvps].sort((a, b) =>
       a.created_at < b.created_at ? 1 : -1,
     ),
   })

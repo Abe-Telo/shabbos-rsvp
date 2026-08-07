@@ -61,6 +61,8 @@ function rsvpPayload(form, personId, weekStart, id) {
     meal_style_other: form.mealStyleOther || null,
     food_likes: form.foodLikes || [],
     food_likes_other: form.foodLikesOther || null,
+    bringing_dish:
+      (form.bringingDish || form.potluckContribution || '').trim() || null,
     potluck: form.mealStyle || null,
     bringing: form.foodLikes || [],
     bringing_other: form.foodLikesOther || null,
@@ -90,6 +92,18 @@ async function api(path, options = {}) {
   return body
 }
 
+function publicRsvp(row) {
+  if (!row) return row
+  const { phone, ...rest } = row
+  return rest
+}
+
+function publicPerson(row) {
+  if (!row) return row
+  const { phone, phone_digits, ...rest } = row
+  return rest
+}
+
 async function submitApi(form) {
   return api('/rsvps', {
     method: 'POST',
@@ -99,12 +113,12 @@ async function submitApi(form) {
 
 async function getWeekRsvpsApi(weekStart = currentSunday()) {
   const data = await api(`/rsvps?week=${encodeURIComponent(weekStart)}`)
-  return data.rsvps || []
+  return (data.rsvps || []).map(publicRsvp)
 }
 
 async function getPeopleApi() {
   const data = await api('/people')
-  return data.people || []
+  return (data.people || []).map(publicPerson)
 }
 
 async function unlockAdminApi(password) {
@@ -121,7 +135,7 @@ async function getSponsorshipsApi(token) {
     method: 'POST',
     body: JSON.stringify({ token, action: 'list' }),
   })
-  return body.sponsorships || []
+  return body
 }
 
 /* ---------- Local / demo mode ---------- */
@@ -467,8 +481,15 @@ export async function getSponsorships() {
   const token = getAdminSession()
   if (!token) throw new Error('Not unlocked')
   if (API_URL) return getSponsorshipsApi(token)
-  if (isSupabaseConfigured) return getSponsorshipsSupabase(token)
-  return getSponsorshipsLocal()
+  if (isSupabaseConfigured) {
+    return { sponsorships: await getSponsorshipsSupabase(token) }
+  }
+  const data = loadLocal()
+  return {
+    sponsorships: await getSponsorshipsLocal(),
+    people: data.people,
+    rsvps: data.rsvps,
+  }
 }
 
 export function comingLabel(value) {

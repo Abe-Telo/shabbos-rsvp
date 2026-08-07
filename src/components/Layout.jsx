@@ -32,6 +32,7 @@ export default function Layout() {
               Form
             </NavLink>
             <NavLink to="/board">This week</NavLink>
+            <NavLink to="/food">Food</NavLink>
             <NavLink to="/people">People</NavLink>
             <NavLink to="/admin">Admin</NavLink>
           </nav>

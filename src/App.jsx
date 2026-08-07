@@ -12,6 +12,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<FormPage />} />
           <Route path="board" element={<BoardPage />} />
+          <Route path="food" element={<BoardPage defaultTab="food" />} />
           <Route path="people" element={<PeoplePage />} />
           <Route path="admin" element={<AdminPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

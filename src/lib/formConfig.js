@@ -129,6 +129,7 @@ export function emptyForm() {
     mealStyleOther: '',
     foodLikes: [],
     foodLikesOther: '',
+    bringingDish: '',
     heardAbout: '',
     invitedBy: '',
     guestNames: '',
