@@ -14,6 +14,7 @@ import { currentSunday, formatWeekLabel } from '../lib/week'
 function tabFromPath(pathname, defaultTab) {
   if (defaultTab === 'food' || pathname.endsWith('/food')) return 'food'
   if (defaultTab === 'past' || pathname.endsWith('/people')) return 'past'
+  if (defaultTab === 'sheet' || pathname.endsWith('/sheet')) return 'sheet'
   return 'coming'
 }
 
@@ -36,6 +37,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     setTab(next)
     if (next === 'food') navigate('/food')
     else if (next === 'past') navigate('/people')
+    else if (next === 'sheet') navigate('/sheet')
     else navigate('/board')
   }
 
@@ -84,6 +86,35 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     return { coming: publicRsvps.length, guests, dishes }
   }, [publicRsvps])
 
+  const sheetRows = useMemo(() => {
+    return [...publicRsvps]
+      .sort((a, b) =>
+        String(a.full_name || '').localeCompare(String(b.full_name || ''), undefined, {
+          sensitivity: 'base',
+        }),
+      )
+      .map((r) => {
+        const likes = [...(r.food_likes || r.bringing || [])]
+        const other = r.food_likes_other || r.bringing_other
+        if (other) likes.push(other)
+        const start =
+          r.meal_start_time === 'other'
+            ? r.meal_start_other || 'Other'
+            : mealStartLabel(r.meal_start_time) || r.meal_start_time || ''
+        return {
+          id: r.id,
+          name: r.full_name || '',
+          coming: comingLabel(r.coming),
+          style: mealStyleLabel(r.meal_style || r.potluck) || '',
+          start,
+          bringing: (r.bringing_dish || '').trim(),
+          likes: likes.join(', '),
+          guests: r.guest_names || '',
+          guestCount: r.guest_count ? String(r.guest_count) : '',
+        }
+      })
+  }, [publicRsvps])
+
   return (
     <>
       <section className="hero">
@@ -92,14 +123,18 @@ export default function BoardPage({ defaultTab = 'coming' }) {
             ? 'Food this week'
             : tab === 'past'
               ? 'Past people'
-              : 'This week'}
+              : tab === 'sheet'
+                ? 'Sheet view'
+                : 'This week'}
         </h1>
         <p>
           {tab === 'food'
             ? `Dishes people are bringing for ${formatWeekLabel(week)}.`
             : tab === 'past'
               ? 'Everyone who has ever joined — all weeks, attendance counts, and food history.'
-              : `Public RSVPs for ${formatWeekLabel(week)} — who selected each coming answer. Phones and sponsorship stay private.`}
+              : tab === 'sheet'
+                ? `Spreadsheet of public RSVPs for ${formatWeekLabel(week)}. Phones and sponsorship stay private.`
+                : `Public RSVPs for ${formatWeekLabel(week)} — who selected each coming answer. Phones and sponsorship stay private.`}
         </p>
       </section>
 
@@ -146,9 +181,62 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         >
           Past people
         </button>
+        <button
+          type="button"
+          className={`btn ${tab === 'sheet' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => selectTab('sheet')}
+        >
+          Sheet view
+        </button>
       </div>
 
       {tab === 'past' && <PastPeopleList compact />}
+
+      {tab === 'sheet' && (
+        <div className="panel">
+          <h2>This week — sheet</h2>
+          <p className="hint">
+            Public columns only (no phones or sponsorship). Scroll sideways on
+            small screens.
+          </p>
+          {loading && <p className="meta">Loading…</p>}
+          {!loading && sheetRows.length === 0 && (
+            <div className="empty">No public RSVPs yet this week.</div>
+          )}
+          {sheetRows.length > 0 && (
+            <div className="sheet-wrap">
+              <table className="sheet-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Coming</th>
+                    <th>Meal style</th>
+                    <th>Start</th>
+                    <th>Bringing</th>
+                    <th>Food likes</th>
+                    <th>Guests</th>
+                    <th>#</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sheetRows.map((row) => (
+                    <tr key={row.id}>
+                      <td title={row.name}>{row.name}</td>
+                      <td title={row.coming}>{row.coming}</td>
+                      <td title={row.style}>{row.style}</td>
+                      <td title={row.start}>{row.start}</td>
+                      <td title={row.bringing}>{row.bringing}</td>
+                      <td title={row.likes}>{row.likes}</td>
+                      <td title={row.guests}>{row.guests}</td>
+                      <td title={row.guestCount}>{row.guestCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === 'food' && (
         <div className="panel">

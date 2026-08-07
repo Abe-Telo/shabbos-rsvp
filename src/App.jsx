@@ -15,6 +15,7 @@ export default function App() {
             <Route path="board" element={<BoardPage />} />
             <Route path="food" element={<BoardPage defaultTab="food" />} />
             <Route path="people" element={<BoardPage defaultTab="past" />} />
+            <Route path="sheet" element={<BoardPage defaultTab="sheet" />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
