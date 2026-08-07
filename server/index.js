@@ -104,17 +104,71 @@ function mapRsvpPublic(row, db) {
 
 function mapPersonPublic(row, db) {
   if (!row) return null
-  const { phone, phone_digits, ...rest } = row
+  const { phone, phone_digits, food_prefs, ...rest } = row
   const linked = findLinkedUser(db, {
     personId: row.id,
     phone: row.phone,
     name: row.name,
   })
+  const pastMap = new Map()
+  for (const r of db.rsvps || []) {
+    if (r.person_id !== row.id) continue
+    const prev = pastMap.get(r.week_start)
+    if (!prev || String(r.created_at || '') > String(prev.created_at || '')) {
+      pastMap.set(r.week_start, r)
+    }
+  }
+  const past = [...pastMap.values()]
+    .sort((a, b) => String(b.week_start || '').localeCompare(String(a.week_start || '')))
+    .map((r) => ({
+      week_start: r.week_start,
+      coming: r.coming,
+      bringing_dish: r.bringing_dish || null,
+      meal_style: r.meal_style || null,
+      meal_start_time:
+        r.meal_start_time === 'other'
+          ? r.meal_start_other || 'Other'
+          : r.meal_start_time || null,
+      food_likes: uniqueStrings(r.food_likes || []),
+    }))
+
   return {
     ...rest,
     photo_url: linked?.photo_url || row.photo_url || null,
     profile_username: linked?.username || null,
+    past,
+    // keep a short unique summary for search only
+    highlights: uniqueStrings(parsePrefChunks(food_prefs)),
   }
+}
+
+function uniqueStrings(list) {
+  const seen = new Set()
+  const out = []
+  for (const raw of list || []) {
+    const s = String(raw || '').trim()
+    if (!s) continue
+    const key = s.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(s)
+  }
+  return out
+}
+
+function parsePrefChunks(foodPrefs) {
+  if (!foodPrefs) return []
+  const chunks = String(foodPrefs)
+    .split(/\s*\|\s*/)
+    .flatMap((chunk) => chunk.split(/,\s*(?=Bringing:|Style:|Start:|Sponsor:)/))
+  return chunks.map((c) => c.trim()).filter(Boolean)
+}
+
+function mergeFoodPrefs(existing, next) {
+  return uniqueStrings([
+    ...parsePrefChunks(existing),
+    ...parsePrefChunks(next),
+  ]).join(' | ') || null
 }
 
 function findLinkedUser(db, { personId, phone, name }) {
@@ -180,7 +234,14 @@ function upsertPerson(db, form) {
     person.phone_digits = phoneKey || null
     person.last_seen = now
     if (prefs) {
-      person.food_prefs = [person.food_prefs, prefs].filter(Boolean).join(' | ')
+      const parts = String(person.food_prefs || '')
+        .split(' | ')
+        .map((p) => p.trim())
+        .filter(Boolean)
+      if (!parts.includes(prefs)) {
+        parts.push(prefs)
+        person.food_prefs = parts.join(' | ')
+      }
     }
     if (attending && !already) {
       person.times_attended = (person.times_attended || 0) + 1
