@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import FoodSectionCard from '../components/FoodSectionCard'
 import PastPeopleList from '../components/PastPeopleList'
 import PersonAvatar from '../components/PersonAvatar'
-import { comingLabel, getWeekRsvps } from '../lib/api'
-import MyFoodUpdate from '../components/MyFoodUpdate'
+import { comingLabel, findMyRsvpThisWeek, getWeekRsvps } from '../lib/api'
 import {
   comingOptionLabel,
   foodIconFor,
@@ -11,6 +11,7 @@ import {
   mealStyleLabel,
   PUBLIC_COMING_VALUES,
 } from '../lib/formConfig'
+import { loadRememberedForm } from '../lib/localProfile'
 import { currentSunday, formatWeekLabel } from '../lib/week'
 
 function tabFromPath(pathname, defaultTab) {
@@ -30,17 +31,23 @@ export default function BoardPage({ defaultTab = 'coming' }) {
   const [tab, setTab] = useState(() =>
     tabFromPath(location.pathname, defaultTab),
   )
+  const [myIdentity, setMyIdentity] = useState(() => {
+    const r = loadRememberedForm()
+    return {
+      fullName: r.fullName || '',
+      phone: r.phone || '',
+      rsvpId: null,
+    }
+  })
 
   useEffect(() => {
     setTab(tabFromPath(location.pathname, defaultTab))
   }, [location.pathname, defaultTab])
 
-  function selectTab(next) {
-    setTab(next)
-    if (next === 'food') navigate('/food')
-    else if (next === 'past') navigate('/people')
-    else if (next === 'sheet') navigate('/sheet')
-    else navigate('/board')
+  async function refreshRsvps() {
+    const rows = await getWeekRsvps(week)
+    setRsvps(rows)
+    return rows
   }
 
   useEffect(() => {
@@ -60,6 +67,58 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     }
   }, [week])
 
+  // Auto-unlock your food section when remembered name/phone matches an RSVP
+  useEffect(() => {
+    if (tab !== 'food') return
+    const name = myIdentity.fullName?.trim()
+    const phone = myIdentity.phone?.trim()
+    if (!name && !phone) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const mine = await findMyRsvpThisWeek({ fullName: name, phone })
+        if (cancelled || !mine?.rsvp) return
+        setMyIdentity((prev) => {
+          if (prev.rsvpId === mine.rsvp.id) return prev
+          return {
+            fullName: name || mine.rsvp.full_name || prev.fullName,
+            phone: phone || mine.rsvp.phone || prev.phone,
+            rsvpId: mine.rsvp.id,
+          }
+        })
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, myIdentity.fullName, myIdentity.phone])
+
+  function selectTab(next) {
+    setTab(next)
+    if (next === 'food') navigate('/food')
+    else if (next === 'past') navigate('/people')
+    else if (next === 'sheet') navigate('/sheet')
+    else navigate('/board')
+  }
+
+  async function claimFoodSection({ fullName, phone, rsvpId }) {
+    const mine = await findMyRsvpThisWeek({ fullName, phone })
+    if (!mine?.rsvp) {
+      throw new Error('No RSVP found for that name/phone this week')
+    }
+    if (rsvpId && mine.rsvp.id !== rsvpId) {
+      throw new Error(
+        'That name/phone belongs to a different RSVP — open your own section',
+      )
+    }
+    setMyIdentity({
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      rsvpId: mine.rsvp.id,
+    })
+  }
   const publicRsvps = useMemo(
     () => rsvps.filter((r) => PUBLIC_COMING_VALUES.includes(r.coming)),
     [rsvps],
@@ -89,7 +148,11 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         food_photos: Array.isArray(r.food_photos) ? r.food_photos : [],
         food_comment: (r.food_comment || '').trim(),
       }))
-      .filter((r) => r.dish || r.food_photos.length || r.food_comment)
+      .sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+          sensitivity: 'base',
+        }),
+      )
     return { coming: publicRsvps.length, guests, dishes }
   }, [publicRsvps])
 
@@ -275,65 +338,33 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         <div className="panel">
           <h2>Food people are bringing</h2>
           <p className="hint">
-            From people who RSVP&apos;d publicly this week. Photos and comments
-            welcome. Resets each Sunday.
+            After you RSVP, open your section below — tap + for photos, or type
+            in the chat box and Send. Confirm with your RSVP name and phone the
+            first time.
           </p>
-          <MyFoodUpdate
-            onSaved={async () => {
-              try {
-                const rows = await getWeekRsvps(week)
-                setRsvps(rows)
-              } catch {
-                /* ignore refresh errors */
-              }
-            }}
-          />
           {loading && <p className="meta">Loading…</p>}
           {!loading && stats.dishes.length === 0 && (
             <div className="empty">
-              No dishes listed yet. Guests can answer “What are you bringing this
-              week?” and add food photos on the form.
+              No public RSVPs yet this week. Fill out the form first, then come
+              back here to post food photos.
             </div>
           )}
           <div className="list food-week-list">
             {stats.dishes.map((d) => (
-              <article className="food-card" key={d.id || `${d.name}-${d.dish}`}>
-                <div className="food-card-head">
-                  <PersonAvatar name={d.name} photoUrl={d.photo_url} size={56} />
-                  <div className="food-card-meta">
-                    {d.profile_username ? (
-                      <Link
-                        className="person-name-link"
-                        to={`/u/${encodeURIComponent(d.profile_username)}`}
-                      >
-                        <strong>{d.name}</strong>
-                      </Link>
-                    ) : (
-                      <strong>{d.name}</strong>
-                    )}
-                    <div className="meta">
-                      {d.coming ? d.coming : 'Coming'}
-                      {d.dish ? ` · bringing` : ''}
-                    </div>
-                    {d.dish && <div className="food-card-dish">{d.dish}</div>}
-                  </div>
-                </div>
-                {d.food_comment && (
-                  <p className="food-card-comment">{d.food_comment}</p>
-                )}
-                {d.food_photos.length > 0 && (
-                  <div className="food-card-gallery">
-                    {d.food_photos.map((p) => (
-                      <figure className="food-card-shot" key={p.id || p.url}>
-                        <a href={p.url} target="_blank" rel="noreferrer">
-                          <img src={p.url} alt={p.caption || d.dish || 'Food'} />
-                        </a>
-                        {p.caption && <figcaption>{p.caption}</figcaption>}
-                      </figure>
-                    ))}
-                  </div>
-                )}
-              </article>
+              <FoodSectionCard
+                key={d.id}
+                dish={d}
+                isMine={myIdentity.rsvpId === d.id}
+                identity={myIdentity}
+                onClaim={claimFoodSection}
+                onSaved={async () => {
+                  try {
+                    await refreshRsvps()
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              />
             ))}
           </div>
         </div>

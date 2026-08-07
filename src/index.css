@@ -575,6 +575,118 @@ select {
   white-space: pre-wrap;
 }
 
+.food-card-mine {
+  border-color: rgba(26, 58, 44, 0.35);
+  box-shadow: 0 0 0 1px rgba(26, 58, 44, 0.08);
+}
+
+.food-add-btn {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 58, 44, 0.3);
+  background: rgba(26, 58, 44, 0.08);
+  color: var(--bg-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.food-add-btn:hover {
+  background: rgba(26, 58, 44, 0.16);
+}
+
+.food-chat {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.food-chat-bubble {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 14px 14px 14px 4px;
+  background: rgba(243, 235, 224, 0.85);
+  border: 1px solid rgba(26, 36, 28, 0.08);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.food-composer {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.15rem;
+}
+
+.food-composer input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 0.65rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 36, 28, 0.18);
+  background: #fff;
+}
+
+.food-composer-attach {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 36, 28, 0.18);
+  background: #fff;
+  color: var(--bg-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.food-composer-attach:hover {
+  background: rgba(243, 235, 224, 0.85);
+}
+
+.food-composer-send {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding-inline: 1rem;
+}
+
+.food-add-tile {
+  width: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  border-radius: 12px;
+  border-style: dashed;
+  font-size: 2rem;
+}
+
+.food-claim-btn {
+  font-size: 0.9rem;
+}
+
+.food-claim-form {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: rgba(243, 235, 224, 0.45);
+  border: 1px solid rgba(26, 36, 28, 0.08);
+}
+
+.food-claim-form input {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(26, 36, 28, 0.18);
+  background: #fff;
+}
+
 .food-card-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
