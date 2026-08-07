@@ -27,10 +27,16 @@ html,
 body,
 #root {
   min-height: 100%;
+  max-width: 100%;
+}
+
+html {
+  overflow-x: clip;
 }
 
 body {
   margin: 0;
+  overflow-x: clip;
   font-family: var(--font-body);
   color: var(--ink);
   background:
@@ -57,6 +63,8 @@ select {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .site-header {
@@ -70,12 +78,14 @@ select {
 
 .site-header-inner {
   max-width: 920px;
+  width: 100%;
   margin: 0 auto;
   padding: 0.85rem 1.25rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  min-width: 0;
 }
 
 .brand {
@@ -90,6 +100,13 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nav .btn {
+  font-size: 0.88rem;
+  padding: 0.45rem 0.8rem;
 }
 
 .nav a {
@@ -118,6 +135,19 @@ select {
   max-width: 920px;
   margin: 0 auto;
   padding: 1.5rem 1.25rem 3rem;
+  min-width: 0;
+}
+
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.35rem 1.4rem;
+  animation: rise 0.65s ease both;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .main-wide {
@@ -175,15 +205,6 @@ select {
   color: var(--bg-mid);
   font-size: 0.9rem;
   font-weight: 600;
-}
-
-.panel {
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 1.35rem 1.4rem;
-  animation: rise 0.65s ease both;
 }
 
 .panel + .panel {
@@ -536,6 +557,8 @@ select {
 
 .food-week-list {
   gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .food-card {
@@ -545,12 +568,16 @@ select {
   border-radius: 16px;
   background: #fff;
   border: 1px solid var(--line);
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .food-card-head {
   display: flex;
   align-items: flex-start;
   gap: 0.85rem;
+  min-width: 0;
 }
 
 .food-card-meta {
@@ -558,6 +585,7 @@ select {
   flex: 1;
   display: grid;
   gap: 0.2rem;
+  overflow-wrap: anywhere;
 }
 
 .food-card-head .food-add-btn {
@@ -568,6 +596,8 @@ select {
   font-weight: 700;
   font-size: 1.05rem;
   color: var(--bg-deep);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .food-card-comment {
@@ -657,11 +687,15 @@ select {
   gap: 0.45rem;
   align-items: center;
   margin-top: 0.15rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .food-composer input[type='text'] {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   font: inherit;
   padding: 0.65rem 0.85rem;
   border-radius: 999px;
@@ -670,7 +704,7 @@ select {
 }
 
 .food-composer-attach {
-  flex-shrink: 0;
+  flex: 0 0 2.5rem;
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 999px;
@@ -688,18 +722,10 @@ select {
 }
 
 .food-composer-send {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   border-radius: 999px;
-  padding-inline: 1rem;
-}
-
-.food-add-tile {
-  width: 100%;
-  aspect-ratio: 1;
-  height: auto;
-  border-radius: 12px;
-  border-style: dashed;
-  font-size: 2rem;
+  padding: 0.65rem 0.9rem;
+  white-space: nowrap;
 }
 
 .food-claim-btn {
@@ -713,10 +739,14 @@ select {
   border-radius: 12px;
   background: rgba(243, 235, 224, 0.45);
   border: 1px solid rgba(26, 36, 28, 0.08);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .food-claim-form input {
   font: inherit;
+  width: 100%;
+  max-width: 100%;
   padding: 0.55rem 0.7rem;
   border-radius: 10px;
   border: 1px solid rgba(26, 36, 28, 0.18);
@@ -725,8 +755,10 @@ select {
 
 .food-card-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
   gap: 0.65rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .food-card-shot {
@@ -1062,15 +1094,94 @@ select {
 @media (max-width: 600px) {
   .site-header-inner {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    gap: 0.65rem;
+    padding: 0.75rem 0.85rem;
   }
 
   .header-right {
     width: 100%;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .nav {
+    width: 100%;
+    gap: 0.3rem;
+  }
+
+  .nav a {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .main {
+    padding: 1rem 0.75rem 2.5rem;
   }
 
   .panel {
-    padding: 1.1rem;
+    padding: 0.95rem 0.85rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(1.75rem, 8vw, 2.4rem);
+  }
+
+  .food-card {
+    padding: 0.85rem 0.8rem;
+  }
+
+  .food-card-head {
+    gap: 0.55rem;
+  }
+
+  .food-card-dish {
+    font-size: 1rem;
+  }
+
+  .food-composer {
+    gap: 0.35rem;
+  }
+
+  .food-composer-attach,
+  .food-composer-attach-disabled {
+    flex-basis: 2.25rem;
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .food-composer input[type='text'] {
+    padding: 0.55rem 0.7rem;
+    font-size: 0.95rem;
+  }
+
+  .food-composer-send {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .food-card-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .food-add-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: 1.35rem;
+  }
+
+  .actions {
+    gap: 0.5rem;
+  }
+
+  .actions .btn {
+    padding: 0.6rem 1rem;
+  }
+
+  .board-tabs,
+  .nav.board-local {
+    gap: 0.35rem;
   }
 }
