@@ -9,7 +9,14 @@ fs.mkdirSync(dataDir, { recursive: true })
 const dbPath = path.join(dataDir, 'shabbos.json')
 
 function empty() {
-  return { people: [], rsvps: [], sponsorships: [], admin_sessions: [] }
+  return {
+    people: [],
+    rsvps: [],
+    sponsorships: [],
+    admin_sessions: [],
+    users: [],
+    user_sessions: [],
+  }
 }
 
 export function loadDb() {

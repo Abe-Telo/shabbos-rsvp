@@ -1,6 +1,14 @@
 import cors from 'cors'
 import express from 'express'
 import { v4 as uuid } from 'uuid'
+import {
+  findUserByToken,
+  hashPassword,
+  normalizeUsername,
+  publicUser,
+  sanitizePhoto,
+  verifyPassword,
+} from './auth.js'
 import { loadDb, saveDb } from './db.js'
 
 const PORT = Number(process.env.PORT || 3055)
@@ -24,13 +32,28 @@ app.use(
       'http://127.0.0.1:5173',
       'http://localhost:4173',
     ],
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 )
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({ limit: '2mb' }))
 
 function digits(phone) {
   return String(phone || '').replace(/\D/g, '')
+}
+
+function bearerToken(req) {
+  const h = req.headers.authorization || ''
+  const m = /^Bearer\s+(.+)$/i.exec(h)
+  return m ? m[1].trim() : String(req.body?.token || req.query?.token || '').trim()
+}
+
+function createUserSession(db, userId) {
+  const token = uuid()
+  const expires_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+  db.user_sessions = db.user_sessions || []
+  db.user_sessions.push({ token, user_id: userId, expires_at })
+  return { token, expires_at }
 }
 
 function foodPrefs(form) {
@@ -128,6 +151,140 @@ function upsertPerson(db, form) {
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'shabbos-rsvp-api' })
+})
+
+app.post('/auth/register', (req, res) => {
+  try {
+    const body = req.body || {}
+    const username = normalizeUsername(body.username)
+    const password = String(body.password || '')
+    const fullName = String(body.fullName || body.full_name || '').trim()
+    const phone = String(body.phone || '').trim()
+
+    if (username.length < 3 || username.length > 24) {
+      return res.status(400).json({ error: 'Username must be 3–24 letters, numbers, or _' })
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' })
+    }
+    if (!fullName) {
+      return res.status(400).json({ error: 'Name is required' })
+    }
+
+    let photo_url = null
+    try {
+      photo_url = sanitizePhoto(body.photoUrl || body.photo_url, body.photoData)
+    } catch (e) {
+      return res.status(400).json({ error: e.message })
+    }
+
+    const db = loadDb()
+    db.users = db.users || []
+    db.user_sessions = db.user_sessions || []
+
+    if (db.users.some((u) => u.username === username)) {
+      return res.status(409).json({ error: 'That username is taken' })
+    }
+
+    const phoneKey = digits(phone)
+    let person =
+      (body.personId && db.people.find((p) => p.id === body.personId)) ||
+      (phoneKey &&
+        db.people.find(
+          (p) => digits(p.phone) === phoneKey || p.phone_digits === phoneKey,
+        )) ||
+      db.people.find((p) => p.name.toLowerCase() === fullName.toLowerCase())
+
+    const { salt, hash } = hashPassword(password)
+    const now = new Date().toISOString()
+    const user = {
+      id: uuid(),
+      username,
+      password_salt: salt,
+      password_hash: hash,
+      full_name: fullName,
+      phone: phone || null,
+      phone_digits: phoneKey || null,
+      photo_url,
+      person_id: person?.id || null,
+      created_at: now,
+    }
+    db.users.push(user)
+    const session = createUserSession(db, user.id)
+    saveDb(db)
+    res.json({ user: publicUser(user), token: session.token, expires_at: session.expires_at })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: e.message || 'Server error' })
+  }
+})
+
+app.post('/auth/login', (req, res) => {
+  try {
+    const username = normalizeUsername(req.body?.username)
+    const password = String(req.body?.password || '')
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' })
+    }
+    const db = loadDb()
+    const user = (db.users || []).find((u) => u.username === username)
+    if (!user || !verifyPassword(password, user.password_salt, user.password_hash)) {
+      return res.status(401).json({ error: 'Incorrect username or password' })
+    }
+    const session = createUserSession(db, user.id)
+    saveDb(db)
+    res.json({ user: publicUser(user), token: session.token, expires_at: session.expires_at })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: e.message || 'Server error' })
+  }
+})
+
+app.get('/auth/me', (req, res) => {
+  const db = loadDb()
+  const user = findUserByToken(db, bearerToken(req))
+  if (!user) return res.status(401).json({ error: 'Not logged in' })
+  res.json({ user: publicUser(user) })
+})
+
+app.patch('/auth/me', (req, res) => {
+  try {
+    const db = loadDb()
+    const user = findUserByToken(db, bearerToken(req))
+    if (!user) return res.status(401).json({ error: 'Not logged in' })
+
+    const body = req.body || {}
+    if (body.fullName || body.full_name) {
+      user.full_name = String(body.fullName || body.full_name).trim() || user.full_name
+    }
+    if (body.phone !== undefined) {
+      user.phone = String(body.phone || '').trim() || null
+      user.phone_digits = digits(user.phone) || null
+    }
+    if (body.photoUrl !== undefined || body.photo_url !== undefined || body.photoData) {
+      try {
+        user.photo_url = sanitizePhoto(
+          body.photoUrl ?? body.photo_url,
+          body.photoData,
+        )
+      } catch (e) {
+        return res.status(400).json({ error: e.message })
+      }
+    }
+    saveDb(db)
+    res.json({ user: publicUser(user) })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: e.message || 'Server error' })
+  }
+})
+
+app.post('/auth/logout', (req, res) => {
+  const token = bearerToken(req)
+  const db = loadDb()
+  db.user_sessions = (db.user_sessions || []).filter((s) => s.token !== token)
+  saveDb(db)
+  res.json({ ok: true })
 })
 
 app.get('/rsvps', (req, res) => {

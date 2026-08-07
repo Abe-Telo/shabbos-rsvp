@@ -19,6 +19,7 @@ import {
   loadRememberedForm,
   saveRememberedForm,
 } from '../lib/localProfile'
+import { useAuth } from '../lib/AuthContext'
 
 const STEPS = {
   checking: 'checking',
@@ -36,6 +37,7 @@ const STEPS = {
   sponsor_only: 'sponsor_only',
   feedback: 'feedback',
   done: 'done',
+  offer_profile: 'offer_profile',
 }
 
 function nextFromComing(coming) {
@@ -240,14 +242,33 @@ function PaymentInfo() {
 }
 
 export default function FormPage() {
-  const rememberedSeed = loadRememberedForm()
-  const [form, setForm] = useState(rememberedSeed)
+  const { user, openRegister } = useAuth()
+  const [form, setForm] = useState(() => {
+    const seed = loadRememberedForm()
+    if (!seed.fullName?.trim() && user?.full_name) {
+      seed.fullName = user.full_name
+    }
+    if (!seed.phone?.trim() && user?.phone) {
+      seed.phone = user.phone
+    }
+    return seed
+  })
   const [step, setStep] = useState(STEPS.checking)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [existing, setExisting] = useState(null)
+  const [submittedPersonId, setSubmittedPersonId] = useState(null)
   const remembered =
     Boolean(form.fullName?.trim()) || Boolean(form.phone?.trim())
+
+  useEffect(() => {
+    if (!user) return
+    setForm((prev) => ({
+      ...prev,
+      fullName: prev.fullName?.trim() ? prev.fullName : user.full_name || '',
+      phone: prev.phone?.trim() ? prev.phone : user.phone || '',
+    }))
+  }, [user])
 
   useEffect(() => {
     let cancelled = false
@@ -310,9 +331,14 @@ export default function FormPage() {
     setError('')
     try {
       saveRememberedForm(form)
-      await submitRsvp(form)
+      const result = await submitRsvp(form)
       setExisting({ form: { ...form }, week_start: existing?.week_start })
-      setStep(STEPS.done)
+      setSubmittedPersonId(result?.person?.id || null)
+      if (user) {
+        setStep(STEPS.done)
+      } else {
+        setStep(STEPS.offer_profile)
+      }
     } catch (e) {
       setError(e.message || 'Could not save. Try again.')
     } finally {
@@ -365,6 +391,51 @@ export default function FormPage() {
         ? 'Thanks for helping / sponsoring.'
         : "Thanks — you're on the list for this week."
 
+  if (step === STEPS.offer_profile) {
+    return (
+      <>
+        <section className="hero">
+          <h1>Shabbos RSVP</h1>
+          <p>{doneMessage}</p>
+        </section>
+        <div className="panel">
+          <div className="banner banner-ok">Response saved.</div>
+          <h2 style={{ fontSize: '1.2rem', marginTop: '1rem' }}>
+            Do you want to create a profile?
+          </h2>
+          <p className="hint">
+            Optional. We&apos;ll use your name and phone from this RSVP. Pick a
+            username and password, and add a photo by upload or URL. You can
+            always RSVP without logging in.
+          </p>
+          <div className="actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                openRegister({
+                  fullName: form.fullName,
+                  phone: form.phone,
+                  personId: submittedPersonId,
+                })
+                setStep(STEPS.done)
+              }}
+            >
+              Yes — create a profile
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setStep(STEPS.done)}
+            >
+              No thanks
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
+
   if (step === STEPS.done) {
     return (
       <>
@@ -374,6 +445,30 @@ export default function FormPage() {
         </section>
         <div className="panel">
           <div className="banner banner-ok">Response saved.</div>
+          {!user && (
+            <p className="hint">
+              Changed your mind?{' '}
+              <button
+                type="button"
+                className="linkish"
+                onClick={() =>
+                  openRegister({
+                    fullName: form.fullName,
+                    phone: form.phone,
+                    personId: submittedPersonId,
+                  })
+                }
+              >
+                Create a profile
+              </button>
+            </p>
+          )}
+          {user && (
+            <p className="hint">
+              Signed in as <strong>@{user.username}</strong>
+              {user.photo_url ? ' — profile photo saved.' : '.'}
+            </p>
+          )}
           <div className="actions">
             <Link className="btn btn-primary" to="/board">
               View this week

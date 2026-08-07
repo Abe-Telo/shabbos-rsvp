@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { AuthModal, ProfileMenu } from './AuthModals'
 import { storageMode } from '../lib/api'
 import {
   currentSunday,
@@ -27,15 +28,18 @@ export default function Layout() {
           <NavLink to="/" className="brand">
             Shabbos RSVP
           </NavLink>
-          <nav className="nav">
-            <NavLink to="/" end>
-              Form
-            </NavLink>
-            <NavLink to="/board">This week</NavLink>
-            <NavLink to="/food">Food</NavLink>
-            <NavLink to="/people">Past people</NavLink>
-            <NavLink to="/admin">Admin</NavLink>
-          </nav>
+          <div className="header-right">
+            <nav className="nav">
+              <NavLink to="/" end>
+                Form
+              </NavLink>
+              <NavLink to="/board">This week</NavLink>
+              <NavLink to="/food">Food</NavLink>
+              <NavLink to="/people">Past people</NavLink>
+              <NavLink to="/admin">Admin</NavLink>
+            </nav>
+            <ProfileMenu />
+          </div>
         </div>
       </header>
 
@@ -55,6 +59,8 @@ export default function Layout() {
       <footer className="site-footer">
         Weekly Shabbos RSVP · answers public · sponsorship admin-only
       </footer>
+
+      <AuthModal />
     </div>
   )
 }
