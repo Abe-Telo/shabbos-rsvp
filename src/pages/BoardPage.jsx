@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import PastPeopleList from '../components/PastPeopleList'
+import PersonAvatar from '../components/PersonAvatar'
 import { comingLabel, getWeekRsvps } from '../lib/api'
 import {
   comingOptionLabel,
@@ -208,6 +209,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
               <table className="sheet-table">
                 <thead>
                   <tr>
+                    <th></th>
                     <th>Name</th>
                     <th>Coming</th>
                     <th>Meal style</th>
@@ -219,18 +221,28 @@ export default function BoardPage({ defaultTab = 'coming' }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sheetRows.map((row) => (
-                    <tr key={row.id}>
-                      <td title={row.name}>{row.name}</td>
-                      <td title={row.coming}>{row.coming}</td>
-                      <td title={row.style}>{row.style}</td>
-                      <td title={row.start}>{row.start}</td>
-                      <td title={row.bringing}>{row.bringing}</td>
-                      <td title={row.likes}>{row.likes}</td>
-                      <td title={row.guests}>{row.guests}</td>
-                      <td title={row.guestCount}>{row.guestCount}</td>
-                    </tr>
-                  ))}
+                  {sheetRows.map((row) => {
+                    const photo = publicRsvps.find((r) => r.id === row.id)?.photo_url
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <PersonAvatar
+                            name={row.name}
+                            photoUrl={photo}
+                            size={28}
+                          />
+                        </td>
+                        <td title={row.name}>{row.name}</td>
+                        <td title={row.coming}>{row.coming}</td>
+                        <td title={row.style}>{row.style}</td>
+                        <td title={row.start}>{row.start}</td>
+                        <td title={row.bringing}>{row.bringing}</td>
+                        <td title={row.likes}>{row.likes}</td>
+                        <td title={row.guests}>{row.guests}</td>
+                        <td title={row.guestCount}>{row.guestCount}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -255,9 +267,18 @@ export default function BoardPage({ defaultTab = 'coming' }) {
             {stats.dishes.map((d, i) => (
               <div className="rsvp-row" key={`${d.name}-${d.dish}-${i}`}>
                 <strong>{d.dish}</strong>
-                <div className="meta">
-                  Brought by {d.name}
-                  {d.coming ? ` · ${d.coming}` : ''}
+                <div className="meta person-heading" style={{ marginTop: '0.25rem' }}>
+                  <PersonAvatar
+                    name={d.name}
+                    photoUrl={
+                      publicRsvps.find((r) => r.full_name === d.name)?.photo_url
+                    }
+                    size={28}
+                  />
+                  <span>
+                    Brought by {d.name}
+                    {d.coming ? ` · ${d.coming}` : ''}
+                  </span>
                 </div>
               </div>
             ))}
@@ -299,7 +320,13 @@ export default function BoardPage({ defaultTab = 'coming' }) {
                   const dish = (r.bringing_dish || '').trim()
                   return (
                     <div className="rsvp-row" key={r.id}>
-                      <strong>{r.full_name}</strong>
+                      <div className="person-heading">
+                        <PersonAvatar
+                          name={r.full_name}
+                          photoUrl={r.photo_url}
+                        />
+                        <strong>{r.full_name}</strong>
+                      </div>
                       <div className="tags">
                         <span className="tag tag-warn">{comingLabel(r.coming)}</span>
                         {r.guest_count ? (

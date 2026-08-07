@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import PersonAvatar from './PersonAvatar'
 import { getPeople } from '../lib/api'
 
 export default function PastPeopleList({ compact = false }) {
@@ -76,7 +77,10 @@ export default function PastPeopleList({ compact = false }) {
       <div className="list">
         {filtered.map((p) => (
           <div className="person-row" key={p.id}>
-            <strong>{p.name}</strong>
+            <div className="person-heading">
+              <PersonAvatar name={p.name} photoUrl={p.photo_url} />
+              <strong>{p.name}</strong>
+            </div>
             <div className="meta">
               Attended {p.times_attended || 0} time
               {(p.times_attended || 0) === 1 ? '' : 's'}

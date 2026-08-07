@@ -83,7 +83,7 @@ function currentSunday(date = new Date()) {
   return `${y}-${m}-${day}`
 }
 
-function mapRsvpPublic(row) {
+function mapRsvpPublic(row, db) {
   if (!row) return null
   const { phone, ...rest } = row
   return {
@@ -91,13 +91,51 @@ function mapRsvpPublic(row) {
     bringing: row.food_likes || [],
     bringing_other: row.food_likes_other || null,
     potluck: row.meal_style || null,
+    photo_url: findUserPhoto(db, {
+      personId: row.person_id,
+      phone: row.phone,
+      name: row.full_name,
+    }),
   }
 }
 
-function mapPersonPublic(row) {
+function mapPersonPublic(row, db) {
   if (!row) return null
   const { phone, phone_digits, ...rest } = row
-  return rest
+  return {
+    ...rest,
+    photo_url:
+      findUserPhoto(db, {
+        personId: row.id,
+        phone: row.phone,
+        name: row.name,
+      }) || row.photo_url || null,
+  }
+}
+
+function findUserPhoto(db, { personId, phone, name }) {
+  const users = (db?.users || []).filter((u) => u.photo_url)
+  if (!users.length) return null
+  if (personId) {
+    const hit = users.find((u) => u.person_id === personId)
+    if (hit) return hit.photo_url
+  }
+  const phoneKey = digits(phone)
+  if (phoneKey) {
+    const hit = users.find(
+      (u) =>
+        digits(u.phone) === phoneKey || digits(u.phone_digits) === phoneKey,
+    )
+    if (hit) return hit.photo_url
+  }
+  if (name) {
+    const n = String(name).toLowerCase()
+    const hit = users.find(
+      (u) => String(u.full_name || '').toLowerCase() === n,
+    )
+    if (hit) return hit.photo_url
+  }
+  return null
 }
 
 function upsertPerson(db, form) {
@@ -295,7 +333,7 @@ app.get('/rsvps', (req, res) => {
   const rows = db.rsvps
     .filter((r) => r.week_start === week)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
-    .map(mapRsvpPublic)
+    .map((r) => mapRsvpPublic(r, db))
   res.json({ week_start: week, rsvps: rows })
 })
 
@@ -329,7 +367,7 @@ app.get('/people', (_req, res) => {
   const db = loadDb()
   const people = [...db.people]
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-    .map(mapPersonPublic)
+    .map((p) => mapPersonPublic(p, db))
   res.json({ people })
 })
 
@@ -400,7 +438,10 @@ app.post('/rsvps', (req, res) => {
     }
 
     saveDb(db)
-    res.json({ rsvp: mapRsvpPublic(rsvp), person: mapPersonPublic(person) })
+    res.json({
+      rsvp: mapRsvpPublic(rsvp, db),
+      person: mapPersonPublic(person, db),
+    })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message || 'Server error' })
@@ -431,12 +472,28 @@ app.post('/admin/unlock', (req, res) => {
       sponsorships: [...db.sponsorships].sort((a, b) =>
         a.created_at < b.created_at ? 1 : -1,
       ),
-      people: [...db.people].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-      ),
-      rsvps: [...db.rsvps].sort((a, b) =>
-        a.created_at < b.created_at ? 1 : -1,
-      ),
+      people: [...db.people]
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+        )
+        .map((p) => ({
+          ...p,
+          photo_url: findUserPhoto(db, {
+            personId: p.id,
+            phone: p.phone,
+            name: p.name,
+          }),
+        })),
+      rsvps: [...db.rsvps]
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        .map((r) => ({
+          ...r,
+          photo_url: findUserPhoto(db, {
+            personId: r.person_id,
+            phone: r.phone,
+            name: r.full_name,
+          }),
+        })),
     })
   }
 
@@ -455,12 +512,28 @@ app.post('/admin/unlock', (req, res) => {
     sponsorships: [...db.sponsorships].sort((a, b) =>
       a.created_at < b.created_at ? 1 : -1,
     ),
-    people: [...db.people].sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-    ),
-    rsvps: [...db.rsvps].sort((a, b) =>
-      a.created_at < b.created_at ? 1 : -1,
-    ),
+    people: [...db.people]
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      )
+      .map((p) => ({
+        ...p,
+        photo_url: findUserPhoto(db, {
+          personId: p.id,
+          phone: p.phone,
+          name: p.name,
+        }),
+      })),
+    rsvps: [...db.rsvps]
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .map((r) => ({
+        ...r,
+        photo_url: findUserPhoto(db, {
+          personId: r.person_id,
+          phone: r.phone,
+          name: r.full_name,
+        }),
+      })),
   })
 })
 

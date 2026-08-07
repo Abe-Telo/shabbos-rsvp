@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import PersonAvatar from '../components/PersonAvatar'
 import {
   clearAdminSession,
   getAdminSession,
@@ -54,7 +55,7 @@ function latestPrefs(foodPrefs) {
   return parts[parts.length - 1] || ''
 }
 
-function SheetTable({ columns, rows, empty }) {
+function SheetTable({ columns, rows, empty, onRowClick }) {
   if (!rows.length) {
     return <div className="empty">{empty || 'No rows.'}</div>
   }
@@ -70,16 +71,112 @@ function SheetTable({ columns, rows, empty }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id}>
+            <tr
+              key={row.id}
+              className={onRowClick ? 'sheet-row-click' : undefined}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+            >
               {columns.map((c) => (
                 <td key={c.key} title={String(row[c.key] ?? '')}>
-                  {row[c.key] ?? ''}
+                  {c.key === 'name' ? (
+                    <span className="person-heading">
+                      <PersonAvatar
+                        name={row.name}
+                        photoUrl={row.photo_url}
+                        size={28}
+                      />
+                      <span>{row.name}</span>
+                    </span>
+                  ) : (
+                    row[c.key] ?? ''
+                  )}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function PersonHistoryModal({ person, rsvps, sponsorships, onClose }) {
+  if (!person) return null
+  const history = [...rsvps]
+    .filter(
+      (r) =>
+        r.person_id === person.id ||
+        (person.phone && r.phone && String(r.phone).replace(/\D/g, '') === String(person.phone).replace(/\D/g, '')) ||
+        String(r.full_name || '').toLowerCase() === String(person.name || '').toLowerCase(),
+    )
+    .sort((a, b) => String(b.week_start || '').localeCompare(String(a.week_start || '')))
+
+  const byRsvp = Object.fromEntries(sponsorships.map((s) => [s.rsvp_id, s]))
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="modal-card"
+        style={{ width: 'min(640px, 100%)' }}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="person-heading" style={{ marginBottom: '0.75rem' }}>
+          <PersonAvatar name={person.name} photoUrl={person.photo_url} size={48} />
+          <div>
+            <h2 style={{ margin: 0 }}>{person.name}</h2>
+            <div className="meta">
+              {person.phone || 'No phone'} · attended {person.times_attended || 0}{' '}
+              time{(person.times_attended || 0) === 1 ? '' : 's'}
+            </div>
+          </div>
+        </div>
+        <p className="hint">Full RSVP history across weeks.</p>
+        {history.length === 0 && <div className="empty">No RSVP history.</div>}
+        <div className="list">
+          {history.map((r) => {
+            const s = byRsvp[r.id]
+            return (
+              <div className="rsvp-row" key={r.id}>
+                <strong>Week of {r.week_start}</strong>
+                <div className="meta">
+                  {comingOptionLabel(r.coming) || r.coming}
+                  {r.meal_style
+                    ? ` · ${mealStyleLabel(r.meal_style) || r.meal_style}`
+                    : ''}
+                  {mealStartDisplay(r) ? ` · start ${mealStartDisplay(r)}` : ''}
+                </div>
+                {r.bringing_dish && (
+                  <div className="meta">Bringing: {r.bringing_dish}</div>
+                )}
+                {(r.food_likes || []).length > 0 && (
+                  <div className="meta">
+                    Likes: {(r.food_likes || []).join(', ')}
+                  </div>
+                )}
+                {r.guest_names && (
+                  <div className="meta">Guests: {r.guest_names}</div>
+                )}
+                {s && (
+                  <div className="meta">
+                    Sponsorship:{' '}
+                    {(s.contributions || [])
+                      .map((c) => CONTRIB_LABELS[c] || c)
+                      .join('; ') || '—'}
+                    {s.notes ? ` · ${s.notes}` : ''}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div className="actions">
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -93,7 +190,27 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState('sheet')
+  const [historyPerson, setHistoryPerson] = useState(null)
   const week = currentSunday()
+
+  function openHistory(personOrRow) {
+    if (!personOrRow) return
+    const match =
+      people.find((p) => p.id === personOrRow.id || p.id === personOrRow.person_id) ||
+      people.find(
+        (p) =>
+          String(p.name || '').toLowerCase() ===
+          String(personOrRow.name || personOrRow.full_name || '').toLowerCase(),
+      ) ||
+      {
+        id: personOrRow.person_id || personOrRow.id,
+        name: personOrRow.name || personOrRow.full_name,
+        phone: personOrRow.phone,
+        photo_url: personOrRow.photo_url,
+        times_attended: personOrRow.attended || personOrRow.times_attended,
+      }
+    setHistoryPerson(match)
+  }
 
   async function load() {
     setLoading(true)
@@ -220,6 +337,8 @@ export default function AdminPage() {
         const s = sponsorByRsvp[r.id] || {}
         return {
           id: r.id,
+          person_id: r.person_id,
+          photo_url: r.photo_url,
           name: r.full_name || '',
           phone: r.phone || '',
           coming: comingOptionLabel(r.coming) || r.coming || '',
@@ -242,6 +361,7 @@ export default function AdminPage() {
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
       .map((p) => ({
         id: p.id,
+        photo_url: p.photo_url,
         name: p.name || '',
         phone: p.phone || '',
         attended: p.times_attended || 0,
@@ -398,16 +518,20 @@ export default function AdminPage() {
                   columns={weekRsvpColumns}
                   rows={weekRsvpSheet}
                   empty="No RSVPs this week."
+                  onRowClick={openHistory}
                 />
               </div>
 
               <div className="panel" style={{ marginTop: '1rem' }}>
                 <h2>Contacts (private)</h2>
-                <p className="hint">All-time people log with phones.</p>
+                <p className="hint">
+                  All-time people log with phones. Click a row for history.
+                </p>
                 <SheetTable
                   columns={contactColumns}
                   rows={contactsSheet}
                   empty="No contacts yet."
+                  onRowClick={openHistory}
                 />
               </div>
 
@@ -418,6 +542,13 @@ export default function AdminPage() {
                   columns={sponsorColumns}
                   rows={sponsorshipSheet}
                   empty="No sponsorship answers yet."
+                  onRowClick={(row) =>
+                    openHistory({
+                      name: row.name,
+                      phone: row.phone,
+                      full_name: row.name,
+                    })
+                  }
                 />
               </div>
             </>
@@ -428,15 +559,23 @@ export default function AdminPage() {
               <div className="panel">
                 <h2>Contacts (private)</h2>
                 <p className="hint">
-                  Phone numbers — host only, not on the public site.
+                  Phone numbers — host only. Click a person to see history.
                 </p>
                 {people.length === 0 && (
                   <div className="empty">No contacts yet.</div>
                 )}
                 <div className="list">
                   {people.map((p) => (
-                    <div className="person-row" key={p.id}>
-                      <strong>{p.name}</strong>
+                    <button
+                      type="button"
+                      className="person-row person-row-btn"
+                      key={p.id}
+                      onClick={() => openHistory(p)}
+                    >
+                      <div className="person-heading">
+                        <PersonAvatar name={p.name} photoUrl={p.photo_url} />
+                        <strong>{p.name}</strong>
+                      </div>
                       <div className="meta">
                         {p.phone || 'No phone'} · attended{' '}
                         {p.times_attended || 0} time
@@ -445,7 +584,7 @@ export default function AdminPage() {
                       {p.food_prefs && (
                         <div className="meta">{latestPrefs(p.food_prefs)}</div>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -475,6 +614,13 @@ export default function AdminPage() {
               )}
             </>
           )}
+
+          <PersonHistoryModal
+            person={historyPerson}
+            rsvps={rsvps}
+            sponsorships={rows}
+            onClose={() => setHistoryPerson(null)}
+          />
         </>
       )}
     </>
