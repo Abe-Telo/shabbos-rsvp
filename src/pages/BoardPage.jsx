@@ -79,11 +79,16 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     )
     const dishes = publicRsvps
       .map((r) => ({
+        id: r.id,
         name: r.full_name,
         dish: (r.bringing_dish || r.potluck_contribution || '').trim(),
         coming: comingLabel(r.coming),
+        photo_url: r.photo_url,
+        profile_username: r.profile_username,
+        food_photos: Array.isArray(r.food_photos) ? r.food_photos : [],
+        food_comment: (r.food_comment || '').trim(),
       }))
-      .filter((r) => r.dish)
+      .filter((r) => r.dish || r.food_photos.length || r.food_comment)
     return { coming: publicRsvps.length, guests, dishes }
   }, [publicRsvps])
 
@@ -269,33 +274,55 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         <div className="panel">
           <h2>Food people are bringing</h2>
           <p className="hint">
-            From people who RSVP&apos;d publicly this week. Resets each Sunday.
+            From people who RSVP&apos;d publicly this week. Photos and comments
+            welcome. Resets each Sunday.
           </p>
           {loading && <p className="meta">Loading…</p>}
           {!loading && stats.dishes.length === 0 && (
             <div className="empty">
               No dishes listed yet. Guests can answer “What are you bringing this
-              week?” on the form.
+              week?” and add food photos on the form.
             </div>
           )}
-          <div className="list">
-            {stats.dishes.map((d, i) => (
-              <div className="rsvp-row" key={`${d.name}-${d.dish}-${i}`}>
-                <strong>{d.dish}</strong>
-                <div className="meta person-heading" style={{ marginTop: '0.25rem' }}>
-                  <PersonAvatar
-                    name={d.name}
-                    photoUrl={
-                      publicRsvps.find((r) => r.full_name === d.name)?.photo_url
-                    }
-                    size={28}
-                  />
-                  <span>
-                    Brought by {d.name}
-                    {d.coming ? ` · ${d.coming}` : ''}
-                  </span>
+          <div className="list food-week-list">
+            {stats.dishes.map((d) => (
+              <article className="food-card" key={d.id || `${d.name}-${d.dish}`}>
+                <div className="food-card-head">
+                  <PersonAvatar name={d.name} photoUrl={d.photo_url} size={56} />
+                  <div className="food-card-meta">
+                    {d.profile_username ? (
+                      <Link
+                        className="person-name-link"
+                        to={`/u/${encodeURIComponent(d.profile_username)}`}
+                      >
+                        <strong>{d.name}</strong>
+                      </Link>
+                    ) : (
+                      <strong>{d.name}</strong>
+                    )}
+                    <div className="meta">
+                      {d.coming ? d.coming : 'Coming'}
+                      {d.dish ? ` · bringing` : ''}
+                    </div>
+                    {d.dish && <div className="food-card-dish">{d.dish}</div>}
+                  </div>
                 </div>
-              </div>
+                {d.food_comment && (
+                  <p className="food-card-comment">{d.food_comment}</p>
+                )}
+                {d.food_photos.length > 0 && (
+                  <div className="food-card-gallery">
+                    {d.food_photos.map((p) => (
+                      <figure className="food-card-shot" key={p.id || p.url}>
+                        <a href={p.url} target="_blank" rel="noreferrer">
+                          <img src={p.url} alt={p.caption || d.dish || 'Food'} />
+                        </a>
+                        {p.caption && <figcaption>{p.caption}</figcaption>}
+                      </figure>
+                    ))}
+                  </div>
+                )}
+              </article>
             ))}
           </div>
         </div>

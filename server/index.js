@@ -11,7 +11,11 @@ import {
   validateUsername,
   verifyPassword,
 } from './auth.js'
-import { loadDb, saveDb } from './db.js'
+import { foodPhotosDir, loadDb, saveDb } from './db.js'
+import {
+  normalizeFoodComment,
+  persistFoodPhotos,
+} from './foodPhotos.js'
 
 const PORT = Number(process.env.PORT || 3055)
 const ADMIN_PASSWORD = process.env.SHABBOS_ADMIN_PASSWORD || 'shabbos-admin'
@@ -38,7 +42,8 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 )
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: '8mb' }))
+app.use('/food-photos', express.static(foodPhotosDir, { maxAge: '7d' }))
 
 function digits(phone) {
   return String(phone || '').replace(/\D/g, '')
@@ -522,14 +527,27 @@ app.post('/rsvps', (req, res) => {
     const db = loadDb()
     const person = upsertPerson(db, { ...form, weekStart })
 
-    const oldIds = db.rsvps
-      .filter((r) => r.person_id === person.id && r.week_start === weekStart)
-      .map((r) => r.id)
+    const oldRows = db.rsvps.filter(
+      (r) => r.person_id === person.id && r.week_start === weekStart,
+    )
+    const oldIds = oldRows.map((r) => r.id)
+    const previousFoodPhotos = oldRows[0]?.food_photos || []
+    const previousFoodComment = oldRows[0]?.food_comment || null
     db.rsvps = db.rsvps.filter((r) => !oldIds.includes(r.id))
     db.sponsorships = db.sponsorships.filter((s) => !oldIds.includes(s.rsvp_id))
 
     const dish =
       String(form.bringingDish || form.potluckContribution || '').trim() || null
+
+    const sentPhotos = form.foodPhotos || form.food_photos
+    const food_photos =
+      sentPhotos === undefined
+        ? previousFoodPhotos
+        : persistFoodPhotos(sentPhotos || [])
+    const food_comment =
+      form.foodComment === undefined && form.food_comment === undefined
+        ? previousFoodComment
+        : normalizeFoodComment(form.foodComment ?? form.food_comment ?? '')
 
     const rsvpId = uuid()
     const now = new Date().toISOString()
@@ -547,6 +565,8 @@ app.post('/rsvps', (req, res) => {
       food_likes: form.foodLikes || [],
       food_likes_other: form.foodLikesOther || null,
       bringing_dish: dish,
+      food_photos,
+      food_comment,
       guest_names: form.guestNames || null,
       guest_count:
         form.guestCount === '' || form.guestCount === null || form.guestCount === undefined
@@ -679,6 +699,187 @@ app.post('/admin/unlock', (req, res) => {
         }),
       })),
   })
+})
+
+function requireAdmin(req, res) {
+  const token = bearerToken(req)
+  const db = loadDb()
+  if (!validSession(db, token)) {
+    res.status(401).json({ error: 'Session expired' })
+    return null
+  }
+  return db
+}
+
+app.patch('/admin/rsvps/:id', (req, res) => {
+  try {
+    const db = requireAdmin(req, res)
+    if (!db) return
+    const rsvp = db.rsvps.find((r) => r.id === req.params.id)
+    if (!rsvp) return res.status(404).json({ error: 'RSVP not found' })
+
+    const body = req.body || {}
+    const str = (v) => (v === undefined ? undefined : String(v ?? '').trim() || null)
+    if (body.full_name !== undefined || body.fullName !== undefined) {
+      rsvp.full_name = str(body.full_name ?? body.fullName) || rsvp.full_name
+    }
+    if (body.phone !== undefined) rsvp.phone = str(body.phone) || rsvp.phone
+    if (body.coming !== undefined) rsvp.coming = str(body.coming) || rsvp.coming
+    if (body.meal_style !== undefined || body.mealStyle !== undefined) {
+      rsvp.meal_style = str(body.meal_style ?? body.mealStyle)
+    }
+    if (body.meal_start_time !== undefined || body.mealStartTime !== undefined) {
+      rsvp.meal_start_time = str(body.meal_start_time ?? body.mealStartTime)
+    }
+    if (body.meal_start_other !== undefined || body.mealStartOther !== undefined) {
+      rsvp.meal_start_other = str(body.meal_start_other ?? body.mealStartOther)
+    }
+    if (body.bringing_dish !== undefined || body.bringingDish !== undefined) {
+      rsvp.bringing_dish = str(body.bringing_dish ?? body.bringingDish)
+    }
+    if (body.guest_names !== undefined || body.guestNames !== undefined) {
+      rsvp.guest_names = str(body.guest_names ?? body.guestNames)
+    }
+    if (body.guest_count !== undefined || body.guestCount !== undefined) {
+      const raw = body.guest_count ?? body.guestCount
+      rsvp.guest_count =
+        raw === '' || raw === null || raw === undefined ? null : Number(raw)
+    }
+    if (body.bringing_more_guests !== undefined || body.bringingMoreGuests !== undefined) {
+      rsvp.bringing_more_guests = str(
+        body.bringing_more_guests ?? body.bringingMoreGuests,
+      )
+    }
+    if (body.food_likes !== undefined || body.foodLikes !== undefined) {
+      const likes = body.food_likes ?? body.foodLikes
+      rsvp.food_likes = Array.isArray(likes)
+        ? likes
+        : String(likes || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+    }
+    if (body.food_comment !== undefined || body.foodComment !== undefined) {
+      rsvp.food_comment = normalizeFoodComment(
+        body.food_comment ?? body.foodComment ?? '',
+      )
+    }
+    if (body.food_photos !== undefined || body.foodPhotos !== undefined) {
+      rsvp.food_photos = persistFoodPhotos(body.food_photos ?? body.foodPhotos ?? [])
+    }
+
+    // Keep linked person name/phone in sync when edited
+    const person = db.people.find((p) => p.id === rsvp.person_id)
+    if (person) {
+      if (body.full_name !== undefined || body.fullName !== undefined) {
+        person.name = rsvp.full_name
+      }
+      if (body.phone !== undefined) {
+        person.phone = rsvp.phone
+        person.phone_digits = digits(rsvp.phone)
+      }
+      person.last_seen = new Date().toISOString()
+    }
+
+    // Optional sponsorship fields on same patch
+    if (
+      body.sponsorship_notes !== undefined ||
+      body.sponsorshipNotes !== undefined ||
+      body.sponsorship !== undefined ||
+      body.contributions !== undefined
+    ) {
+      let s = db.sponsorships.find((x) => x.rsvp_id === rsvp.id)
+      if (!s) {
+        s = {
+          id: uuid(),
+          rsvp_id: rsvp.id,
+          person_id: rsvp.person_id,
+          week_start: rsvp.week_start,
+          full_name: rsvp.full_name,
+          phone: rsvp.phone,
+          contributions: [],
+          notes: null,
+          potluck_contribution: rsvp.bringing_dish,
+          created_at: new Date().toISOString(),
+        }
+        db.sponsorships.push(s)
+      }
+      if (body.sponsorship_notes !== undefined || body.sponsorshipNotes !== undefined) {
+        s.notes = str(body.sponsorship_notes ?? body.sponsorshipNotes)
+      }
+      if (body.sponsorship !== undefined || body.contributions !== undefined) {
+        const c = body.sponsorship ?? body.contributions
+        s.contributions = Array.isArray(c)
+          ? c
+          : String(c || '')
+              .split(/;|,/)
+              .map((x) => x.trim())
+              .filter(Boolean)
+      }
+      s.full_name = rsvp.full_name
+      s.phone = rsvp.phone
+      s.potluck_contribution = rsvp.bringing_dish
+    }
+
+    saveDb(db)
+    res.json({
+      rsvp: {
+        ...rsvp,
+        photo_url: findUserPhoto(db, {
+          personId: rsvp.person_id,
+          phone: rsvp.phone,
+          name: rsvp.full_name,
+        }),
+      },
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(400).json({ error: e.message || 'Update failed' })
+  }
+})
+
+/** Guests who already RSVP'd can add/update food photos + comments. */
+app.patch('/rsvps/:id/food', (req, res) => {
+  try {
+    const db = loadDb()
+    const rsvp = db.rsvps.find((r) => r.id === req.params.id)
+    if (!rsvp) return res.status(404).json({ error: 'RSVP not found' })
+
+    const body = req.body || {}
+    const phoneKey = digits(body.phone || '')
+    const name = String(body.fullName || body.full_name || '')
+      .trim()
+      .toLowerCase()
+    const matchesPhone = phoneKey && digits(rsvp.phone) === phoneKey
+    const matchesName =
+      name && String(rsvp.full_name || '').trim().toLowerCase() === name
+    const adminOk = validSession(db, bearerToken(req))
+    if (!adminOk && !matchesPhone && !matchesName) {
+      return res.status(403).json({ error: 'Name or phone must match this RSVP' })
+    }
+
+    if (body.bringing_dish !== undefined || body.bringingDish !== undefined) {
+      rsvp.bringing_dish =
+        String(body.bringing_dish ?? body.bringingDish ?? '').trim() || null
+    }
+    if (body.food_comment !== undefined || body.foodComment !== undefined) {
+      rsvp.food_comment = normalizeFoodComment(
+        body.food_comment ?? body.foodComment ?? '',
+      )
+    }
+    if (body.food_photos !== undefined || body.foodPhotos !== undefined) {
+      rsvp.food_photos = persistFoodPhotos(body.food_photos ?? body.foodPhotos ?? [])
+    } else if (Array.isArray(body.add_photos) || Array.isArray(body.addPhotos)) {
+      const extra = persistFoodPhotos(body.add_photos || body.addPhotos || [])
+      rsvp.food_photos = [...(rsvp.food_photos || []), ...extra].slice(0, 8)
+    }
+
+    saveDb(db)
+    res.json({ rsvp: mapRsvpPublic(rsvp, db) })
+  } catch (e) {
+    console.error(e)
+    res.status(400).json({ error: e.message || 'Update failed' })
+  }
 })
 
 app.listen(PORT, '127.0.0.1', () => {

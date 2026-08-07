@@ -86,6 +86,8 @@ function rsvpPayload(form, personId, weekStart, id) {
     food_likes_other: form.foodLikesOther || null,
     bringing_dish:
       (form.bringingDish || form.potluckContribution || '').trim() || null,
+    food_photos: Array.isArray(form.foodPhotos) ? form.foodPhotos : [],
+    food_comment: String(form.foodComment || '').trim() || null,
     potluck: form.mealStyle || null,
     bringing: form.foodLikes || [],
     bringing_other: form.foodLikesOther || null,
@@ -118,9 +120,13 @@ function rsvpPayload(form, personId, weekStart, id) {
 /* ---------- Shared HTTP API ---------- */
 
 async function api(path, options = {}) {
+  const { headers: extraHeaders, ...rest } = options
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
+    ...rest,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(extraHeaders || {}),
+    },
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`)
@@ -503,6 +509,8 @@ export function rsvpToForm(rsvp, sponsorship = null) {
   form.foodLikes = rsvp.food_likes || rsvp.bringing || []
   form.foodLikesOther = rsvp.food_likes_other || rsvp.bringing_other || ''
   form.bringingDish = rsvp.bringing_dish || ''
+  form.foodPhotos = Array.isArray(rsvp.food_photos) ? rsvp.food_photos : []
+  form.foodComment = rsvp.food_comment || ''
   form.heardAbout = rsvp.heard_about || ''
   form.invitedBy = rsvp.invited_by || ''
   form.bringingMoreGuests = rsvp.bringing_more_guests || ''
@@ -651,6 +659,106 @@ export async function getSponsorships() {
     people: data.people,
     rsvps: data.rsvps,
   }
+}
+
+export async function updateAdminRsvp(id, patch) {
+  const token = getAdminSession()
+  if (!token) throw new Error('Not unlocked')
+  if (API_URL) {
+    return api(`/admin/rsvps/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patch),
+    })
+  }
+  const data = loadLocal()
+  const rsvp = data.rsvps.find((r) => r.id === id)
+  if (!rsvp) throw new Error('RSVP not found')
+  Object.assign(rsvp, {
+    full_name: patch.full_name ?? patch.fullName ?? rsvp.full_name,
+    phone: patch.phone ?? rsvp.phone,
+    coming: patch.coming ?? rsvp.coming,
+    meal_style: patch.meal_style ?? patch.mealStyle ?? rsvp.meal_style,
+    meal_start_time:
+      patch.meal_start_time ?? patch.mealStartTime ?? rsvp.meal_start_time,
+    bringing_dish: patch.bringing_dish ?? patch.bringingDish ?? rsvp.bringing_dish,
+    guest_names: patch.guest_names ?? patch.guestNames ?? rsvp.guest_names,
+    guest_count:
+      patch.guest_count !== undefined || patch.guestCount !== undefined
+        ? patch.guest_count ?? patch.guestCount
+        : rsvp.guest_count,
+    food_comment:
+      patch.food_comment !== undefined || patch.foodComment !== undefined
+        ? patch.food_comment ?? patch.foodComment
+        : rsvp.food_comment,
+    food_photos:
+      patch.food_photos !== undefined || patch.foodPhotos !== undefined
+        ? patch.food_photos ?? patch.foodPhotos
+        : rsvp.food_photos,
+  })
+  if (
+    patch.sponsorship_notes !== undefined ||
+    patch.sponsorshipNotes !== undefined ||
+    patch.sponsorship !== undefined
+  ) {
+    let s = data.sponsorships.find((x) => x.rsvp_id === id)
+    if (!s) {
+      s = {
+        id: uid(),
+        rsvp_id: id,
+        person_id: rsvp.person_id,
+        week_start: rsvp.week_start,
+        full_name: rsvp.full_name,
+        phone: rsvp.phone,
+        contributions: [],
+        notes: null,
+        potluck_contribution: rsvp.bringing_dish,
+        created_at: new Date().toISOString(),
+      }
+      data.sponsorships.push(s)
+    }
+    if (patch.sponsorship_notes !== undefined || patch.sponsorshipNotes !== undefined) {
+      s.notes = patch.sponsorship_notes ?? patch.sponsorshipNotes
+    }
+    if (patch.sponsorship !== undefined) {
+      s.contributions = Array.isArray(patch.sponsorship)
+        ? patch.sponsorship
+        : String(patch.sponsorship || '')
+            .split(/;|,/)
+            .map((x) => x.trim())
+            .filter(Boolean)
+    }
+  }
+  saveLocal(data)
+  return { rsvp }
+}
+
+export async function updateRsvpFood(id, patch) {
+  if (API_URL) {
+    return api(`/rsvps/${encodeURIComponent(id)}/food`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  const data = loadLocal()
+  const rsvp = data.rsvps.find((r) => r.id === id)
+  if (!rsvp) throw new Error('RSVP not found')
+  if (patch.bringing_dish !== undefined || patch.bringingDish !== undefined) {
+    rsvp.bringing_dish = patch.bringing_dish ?? patch.bringingDish
+  }
+  if (patch.food_comment !== undefined || patch.foodComment !== undefined) {
+    rsvp.food_comment = patch.food_comment ?? patch.foodComment
+  }
+  if (patch.food_photos !== undefined || patch.foodPhotos !== undefined) {
+    rsvp.food_photos = patch.food_photos ?? patch.foodPhotos
+  } else if (patch.add_photos || patch.addPhotos) {
+    rsvp.food_photos = [
+      ...(rsvp.food_photos || []),
+      ...(patch.add_photos || patch.addPhotos || []),
+    ].slice(0, 8)
+  }
+  saveLocal(data)
+  return { rsvp }
 }
 
 export function comingLabel(value) {

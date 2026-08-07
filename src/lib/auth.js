@@ -288,3 +288,40 @@ export function fileToPhotoData(file) {
     reader.readAsDataURL(file)
   })
 }
+
+/** Compress an image file to a JPEG data URL for food gallery uploads. */
+export function fileToFoodPhotoData(file, maxDim = 1100, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('Please choose an image file'))
+      return
+    }
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(img.width * scale))
+        canvas.height = Math.max(1, Math.round(img.height * scale))
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        URL.revokeObjectURL(objectUrl)
+        const dataUrl = canvas.toDataURL('image/jpeg', quality)
+        if (dataUrl.length > 900_000) {
+          reject(new Error('Food photo is still too large — try another image'))
+          return
+        }
+        resolve(dataUrl)
+      } catch (e) {
+        URL.revokeObjectURL(objectUrl)
+        reject(e)
+      }
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('Could not read that image'))
+    }
+    img.src = objectUrl
+  })
+}

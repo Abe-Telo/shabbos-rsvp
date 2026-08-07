@@ -3,8 +3,11 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dataDir = process.env.SHABBOS_DATA_DIR || path.join(__dirname, 'data')
+export const dataDir = process.env.SHABBOS_DATA_DIR || path.join(__dirname, 'data')
 fs.mkdirSync(dataDir, { recursive: true })
+
+export const foodPhotosDir = path.join(dataDir, 'food-photos')
+fs.mkdirSync(foodPhotosDir, { recursive: true })
 
 const dbPath = path.join(dataDir, 'shabbos.json')
 

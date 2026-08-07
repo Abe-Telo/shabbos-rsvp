@@ -6,13 +6,16 @@ import {
   getSponsorships,
   storageMode,
   unlockAdmin,
+  updateAdminRsvp,
 } from '../lib/api'
 import {
+  COMING_OPTIONS,
   comingOptionLabel,
   mealStartLabel,
   mealStyleLabel,
 } from '../lib/formConfig'
 import { currentSunday, formatWeekLabel } from '../lib/week'
+import { fileToFoodPhotoData } from '../lib/auth'
 
 const CONTRIB_LABELS = {
   money: 'Contribute money (PayPal / Venmo)',
@@ -99,6 +102,251 @@ function SheetTable({ columns, rows, empty, onRowClick }) {
     </div>
   )
 }
+
+function EditableRsvpSheet({ rows, empty, onSaved, onOpenHistory }) {
+  const [drafts, setDrafts] = useState({})
+  const [savingId, setSavingId] = useState(null)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    const next = {}
+    for (const r of rows) {
+      next[r.id] = {
+        full_name: r.name || '',
+        phone: r.phone || '',
+        coming: r.comingValue || '',
+        bringing_dish: r.bringing || '',
+        guest_names: r.guests || '',
+        guest_count: r.guestCount === '' || r.guestCount == null ? '' : String(r.guestCount),
+        sponsorship_notes: r.notes || '',
+        food_comment: r.food_comment || '',
+        food_photos: Array.isArray(r.food_photos) ? r.food_photos : [],
+      }
+    }
+    setDrafts(next)
+  }, [rows])
+
+  function setDraft(id, key, value) {
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [key]: value },
+    }))
+  }
+
+  async function saveRow(id) {
+    const draft = drafts[id]
+    if (!draft) return
+    setSavingId(id)
+    setErr('')
+    setMsg('')
+    try {
+      await updateAdminRsvp(id, {
+        full_name: draft.full_name,
+        phone: draft.phone,
+        coming: draft.coming,
+        bringing_dish: draft.bringing_dish,
+        guest_names: draft.guest_names,
+        guest_count: draft.guest_count === '' ? null : Number(draft.guest_count),
+        sponsorship_notes: draft.sponsorship_notes,
+        food_comment: draft.food_comment,
+        food_photos: draft.food_photos,
+      })
+      setMsg('Saved.')
+      await onSaved?.()
+    } catch (e) {
+      setErr(e.message || 'Save failed')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  async function addPhotos(id, files) {
+    if (!files?.length) return
+    setErr('')
+    try {
+      const added = []
+      for (const file of files) {
+        const url = await fileToFoodPhotoData(file)
+        added.push({ id: crypto.randomUUID(), url, caption: '' })
+      }
+      setDrafts((prev) => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          food_photos: [...(prev[id]?.food_photos || []), ...added].slice(0, 8),
+        },
+      }))
+    } catch (e) {
+      setErr(e.message || 'Could not add photo')
+    }
+  }
+
+  if (!rows.length) {
+    return <div className="empty">{empty || 'No rows.'}</div>
+  }
+
+  return (
+    <div>
+      <p className="hint">
+        Edit cells, add food photos, then click Save on that row. Changes go
+        straight into the database.
+      </p>
+      {msg && <div className="banner banner-ok">{msg}</div>}
+      {err && <div className="banner banner-err">{err}</div>}
+      <div className="sheet-wrap">
+        <table className="sheet-table sheet-table-edit">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Coming</th>
+              <th>Bringing</th>
+              <th>Food comment</th>
+              <th>Photos</th>
+              <th>Guests</th>
+              <th>#</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const d = drafts[row.id] || {}
+              return (
+                <tr key={row.id}>
+                  <td>
+                    <span className="person-heading">
+                      <PersonAvatar
+                        name={d.full_name || row.name}
+                        photoUrl={row.photo_url}
+                        size={28}
+                      />
+                      <input
+                        className="sheet-input"
+                        value={d.full_name || ''}
+                        onChange={(e) =>
+                          setDraft(row.id, 'full_name', e.target.value)
+                        }
+                      />
+                    </span>
+                  </td>
+                  <td>
+                    <input
+                      className="sheet-input"
+                      value={d.phone || ''}
+                      onChange={(e) => setDraft(row.id, 'phone', e.target.value)}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      className="sheet-input"
+                      value={d.coming || ''}
+                      onChange={(e) => setDraft(row.id, 'coming', e.target.value)}
+                    >
+                      {COMING_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      className="sheet-input"
+                      value={d.bringing_dish || ''}
+                      onChange={(e) =>
+                        setDraft(row.id, 'bringing_dish', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td>
+                    <textarea
+                      className="sheet-input sheet-textarea"
+                      rows={2}
+                      value={d.food_comment || ''}
+                      onChange={(e) =>
+                        setDraft(row.id, 'food_comment', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td>
+                    <div className="admin-food-thumbs">
+                      {(d.food_photos || []).map((p) => (
+                        <img key={p.id || p.url} src={p.url} alt="" />
+                      ))}
+                    </div>
+                    <label className="btn btn-ghost" style={{ cursor: 'pointer', fontSize: '0.8rem' }}>
+                      Add
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        hidden
+                        onChange={(e) => {
+                          addPhotos(row.id, [...(e.target.files || [])])
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <input
+                      className="sheet-input"
+                      value={d.guest_names || ''}
+                      onChange={(e) =>
+                        setDraft(row.id, 'guest_names', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="sheet-input"
+                      style={{ width: '3.5rem' }}
+                      value={d.guest_count || ''}
+                      onChange={(e) =>
+                        setDraft(row.id, 'guest_count', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="sheet-input"
+                      value={d.sponsorship_notes || ''}
+                      onChange={(e) =>
+                        setDraft(row.id, 'sponsorship_notes', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td>
+                    <div className="actions" style={{ flexDirection: 'column', gap: '0.35rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={savingId === row.id}
+                        onClick={() => saveRow(row.id)}
+                      >
+                        {savingId === row.id ? '…' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => onOpenHistory?.(row)}
+                      >
+                        History
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 
 function PersonHistoryModal({ person, rsvps, sponsorships, onClose }) {
   if (!person) return null
@@ -341,6 +589,7 @@ export default function AdminPage() {
           photo_url: r.photo_url,
           name: r.full_name || '',
           phone: r.phone || '',
+          comingValue: r.coming || '',
           coming: comingOptionLabel(r.coming) || r.coming || '',
           style: mealStyleLabel(r.meal_style || r.potluck) || r.meal_style || '',
           start: mealStartDisplay(r),
@@ -352,6 +601,8 @@ export default function AdminPage() {
             .map((c) => CONTRIB_LABELS[c] || c)
             .join('; '),
           notes: s.notes || '',
+          food_comment: r.food_comment || '',
+          food_photos: Array.isArray(r.food_photos) ? r.food_photos : [],
         }
       })
   }, [rsvps, sponsorByRsvp, week])
@@ -386,20 +637,6 @@ export default function AdminPage() {
         notes: s.notes || '',
       }))
   }, [rows])
-
-  const weekRsvpColumns = [
-    { key: 'name', label: 'Name' },
-    { key: 'phone', label: 'Phone' },
-    { key: 'coming', label: 'Coming' },
-    { key: 'style', label: 'Meal style' },
-    { key: 'start', label: 'Start time' },
-    { key: 'bringing', label: 'Bringing' },
-    { key: 'likes', label: 'Food likes' },
-    { key: 'guests', label: 'Guests' },
-    { key: 'guestCount', label: '#' },
-    { key: 'sponsorship', label: 'Sponsorship' },
-    { key: 'notes', label: 'Notes' },
-  ]
 
   const contactColumns = [
     { key: 'name', label: 'Name' },
@@ -512,13 +749,13 @@ export default function AdminPage() {
               <div className="panel">
                 <h2>This week RSVPs — {formatWeekLabel(week)}</h2>
                 <p className="hint">
-                  Spreadsheet view of this week’s private answers.
+                  Editable spreadsheet of this week’s private answers.
                 </p>
-                <SheetTable
-                  columns={weekRsvpColumns}
+                <EditableRsvpSheet
                   rows={weekRsvpSheet}
                   empty="No RSVPs this week."
-                  onRowClick={openHistory}
+                  onSaved={load}
+                  onOpenHistory={openHistory}
                 />
               </div>
 

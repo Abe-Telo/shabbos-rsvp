@@ -178,6 +178,8 @@ export function emptyForm() {
     foodLikes: [],
     foodLikesOther: '',
     bringingDish: '',
+    foodPhotos: [],
+    foodComment: '',
     heardAbout: '',
     invitedBy: '',
     bringingMoreGuests: '',

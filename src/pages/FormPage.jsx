@@ -69,6 +69,15 @@ function SubmissionSummary({ form }) {
         {form.bringingDish && (
           <div className="meta">Bringing: {form.bringingDish}</div>
         )}
+        {form.foodComment && (
+          <div className="meta">Food note: {form.foodComment}</div>
+        )}
+        {(form.foodPhotos || []).length > 0 && (
+          <div className="meta">
+            {(form.foodPhotos || []).length} food photo
+            {(form.foodPhotos || []).length === 1 ? '' : 's'} attached
+          </div>
+        )}
         {form.foodLikes?.length > 0 && (
           <div className="tags">
             {form.foodLikes.map((f) => (
@@ -210,7 +219,104 @@ function MealPrefsFields({ form, setField, toggleArray }) {
           Shows on the public “Food this week” list.
         </p>
       </div>
+
+      <FoodPhotosFields form={form} setField={setField} />
     </>
+  )
+}
+
+function FoodPhotosFields({ form, setField }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function onPickFiles(e) {
+    const files = [...(e.target.files || [])]
+    e.target.value = ''
+    if (!files.length) return
+    setBusy(true)
+    setErr('')
+    try {
+      const { fileToFoodPhotoData } = await import('../lib/auth')
+      const next = [...(form.foodPhotos || [])]
+      for (const file of files) {
+        if (next.length >= 8) break
+        const url = await fileToFoodPhotoData(file)
+        next.push({ id: crypto.randomUUID(), url, caption: '' })
+      }
+      setField('foodPhotos', next)
+    } catch (ex) {
+      setErr(ex.message || 'Could not add photo')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function removePhoto(id) {
+    setField(
+      'foodPhotos',
+      (form.foodPhotos || []).filter((p) => p.id !== id),
+    )
+  }
+
+  function setCaption(id, caption) {
+    setField(
+      'foodPhotos',
+      (form.foodPhotos || []).map((p) =>
+        p.id === id ? { ...p, caption } : p,
+      ),
+    )
+  }
+
+  return (
+    <div className="field food-upload-fields">
+      <label>Food photos &amp; comments (optional)</label>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Add up to 8 pictures of what you&apos;re bringing, plus a short comment.
+        Shows on Food this week.
+      </p>
+      <textarea
+        rows={3}
+        value={form.foodComment}
+        onChange={(e) => setField('foodComment', e.target.value)}
+        placeholder="e.g. Just made fresh — Lula Kabab (~18 pieces) and a bottle of wine"
+      />
+      <div className="actions" style={{ marginTop: '0.65rem' }}>
+        <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
+          {busy ? 'Adding…' : 'Add food photos'}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            disabled={busy || (form.foodPhotos || []).length >= 8}
+            onChange={onPickFiles}
+          />
+        </label>
+      </div>
+      {err && <div className="banner banner-err">{err}</div>}
+      {(form.foodPhotos || []).length > 0 && (
+        <div className="food-photo-edit-grid">
+          {(form.foodPhotos || []).map((p) => (
+            <div className="food-photo-edit" key={p.id}>
+              <img src={p.url} alt="" />
+              <input
+                type="text"
+                value={p.caption || ''}
+                onChange={(e) => setCaption(p.id, e.target.value)}
+                placeholder="Caption (optional)"
+              />
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => removePhoto(p.id)}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
