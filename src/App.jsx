@@ -3,7 +3,6 @@ import Layout from './components/Layout'
 import AdminPage from './pages/AdminPage'
 import BoardPage from './pages/BoardPage'
 import FormPage from './pages/FormPage'
-import PeoplePage from './pages/PeoplePage'
 
 export default function App() {
   return (
@@ -13,7 +12,7 @@ export default function App() {
           <Route index element={<FormPage />} />
           <Route path="board" element={<BoardPage />} />
           <Route path="food" element={<BoardPage defaultTab="food" />} />
-          <Route path="people" element={<PeoplePage />} />
+          <Route path="people" element={<BoardPage defaultTab="past" />} />
           <Route path="admin" element={<AdminPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -33,7 +33,7 @@ export default function Layout() {
             </NavLink>
             <NavLink to="/board">This week</NavLink>
             <NavLink to="/food">Food</NavLink>
-            <NavLink to="/people">People</NavLink>
+            <NavLink to="/people">Past people</NavLink>
             <NavLink to="/admin">Admin</NavLink>
           </nav>
         </div>

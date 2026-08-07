@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import PastPeopleList from '../components/PastPeopleList'
 import { comingLabel, getWeekRsvps } from '../lib/api'
 import {
   comingOptionLabel,
@@ -9,25 +10,33 @@ import {
 } from '../lib/formConfig'
 import { currentSunday, formatWeekLabel } from '../lib/week'
 
+function tabFromPath(pathname, defaultTab) {
+  if (defaultTab === 'food' || pathname.endsWith('/food')) return 'food'
+  if (defaultTab === 'past' || pathname.endsWith('/people')) return 'past'
+  return 'coming'
+}
+
 export default function BoardPage({ defaultTab = 'coming' }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const week = currentSunday()
   const [rsvps, setRsvps] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState(
-    defaultTab === 'food' || location.pathname.endsWith('/food')
-      ? 'food'
-      : 'coming',
+  const [tab, setTab] = useState(() =>
+    tabFromPath(location.pathname, defaultTab),
   )
 
   useEffect(() => {
-    setTab(
-      defaultTab === 'food' || location.pathname.endsWith('/food')
-        ? 'food'
-        : 'coming',
-    )
+    setTab(tabFromPath(location.pathname, defaultTab))
   }, [location.pathname, defaultTab])
+
+  function selectTab(next) {
+    setTab(next)
+    if (next === 'food') navigate('/food')
+    else if (next === 'past') navigate('/people')
+    else navigate('/board')
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -77,47 +86,68 @@ export default function BoardPage({ defaultTab = 'coming' }) {
   return (
     <>
       <section className="hero">
-        <h1>{tab === 'food' ? 'Food this week' : 'This week'}</h1>
+        <h1>
+          {tab === 'food'
+            ? 'Food this week'
+            : tab === 'past'
+              ? 'Past people'
+              : 'This week'}
+        </h1>
         <p>
           {tab === 'food'
             ? `Dishes people are bringing for ${formatWeekLabel(week)}.`
-            : `Public RSVPs for ${formatWeekLabel(week)} — who selected each coming answer. Phones and sponsorship stay private.`}
+            : tab === 'past'
+              ? 'Everyone who has ever joined — all weeks, attendance counts, and food history.'
+              : `Public RSVPs for ${formatWeekLabel(week)} — who selected each coming answer. Phones and sponsorship stay private.`}
         </p>
       </section>
 
-      {error && <div className="banner banner-err">{error}</div>}
+      {error && tab !== 'past' && (
+        <div className="banner banner-err">{error}</div>
+      )}
 
-      <div className="stats">
-        <div className="stat">
-          <span className="n">{stats.coming}</span>
-          <span className="l">Public RSVPs</span>
+      {tab !== 'past' && (
+        <div className="stats">
+          <div className="stat">
+            <span className="n">{stats.coming}</span>
+            <span className="l">Public RSVPs</span>
+          </div>
+          <div className="stat">
+            <span className="n">{stats.guests}</span>
+            <span className="l">Extra guests</span>
+          </div>
+          <div className="stat">
+            <span className="n">{stats.dishes.length}</span>
+            <span className="l">Dishes listed</span>
+          </div>
         </div>
-        <div className="stat">
-          <span className="n">{stats.guests}</span>
-          <span className="l">Extra guests</span>
-        </div>
-        <div className="stat">
-          <span className="n">{stats.dishes.length}</span>
-          <span className="l">Dishes listed</span>
-        </div>
-      </div>
+      )}
 
       <div className="nav" style={{ marginBottom: '1rem' }}>
         <button
           type="button"
           className={`btn ${tab === 'coming' ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={() => setTab('coming')}
+          onClick={() => selectTab('coming')}
         >
           Who&apos;s coming
         </button>
         <button
           type="button"
           className={`btn ${tab === 'food' ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={() => setTab('food')}
+          onClick={() => selectTab('food')}
         >
           Food this week
         </button>
+        <button
+          type="button"
+          className={`btn ${tab === 'past' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => selectTab('past')}
+        >
+          Past people
+        </button>
       </div>
+
+      {tab === 'past' && <PastPeopleList compact />}
 
       {tab === 'food' && (
         <div className="panel">
