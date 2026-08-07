@@ -100,13 +100,13 @@ export const GUEST_FILL_OPTIONS = [
 
 /** Host payment details shown on the sponsor page. Edit these anytime. */
 export const HOST_PAYMENT = {
-  zelle: import.meta.env.VITE_ZELLE || 'Update Zelle in site settings',
+  zelle: import.meta.env.VITE_ZELLE || 'abe@bigtechservices.com',
   venmo: import.meta.env.VITE_VENMO || '',
   paypal: import.meta.env.VITE_PAYPAL || '',
   whatsapp:
     import.meta.env.VITE_WHATSAPP_LINK ||
     'Ask the host for the WhatsApp group invite',
-  note: 'Thank you for sponsoring — it helps us keep hosting Shabbos together.',
+  note: 'Thank you for sponsoring — please send Zelle to abe@bigtechservices.com',
 }
 
 export const ATTENDING_VALUES = new Set([
