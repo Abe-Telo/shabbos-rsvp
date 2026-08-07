@@ -3,10 +3,30 @@ import crypto from 'crypto'
 const MAX_PHOTO_CHARS = 450_000 // ~337KB binary as base64 data URL
 
 export function normalizeUsername(raw) {
-  return String(raw || '')
+  const s = String(raw || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '')
+  if (s.includes('@')) {
+    return s.replace(/[^a-z0-9.@_+-]/g, '')
+  }
+  return s.replace(/[^a-z0-9_]/g, '')
+}
+
+export function validateUsername(username) {
+  if (!username) return 'Username or email is required'
+  if (username.includes('@')) {
+    if (username.length < 5 || username.length > 64) {
+      return 'Email must be 5–64 characters'
+    }
+    if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(username)) {
+      return 'Enter a valid email, or a username (letters, numbers, _)'
+    }
+    return ''
+  }
+  if (username.length < 3 || username.length > 24) {
+    return 'Username must be 3–24 letters, numbers, or _'
+  }
+  return ''
 }
 
 export function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {

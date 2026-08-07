@@ -7,6 +7,7 @@ import {
   normalizeUsername,
   publicUser,
   sanitizePhoto,
+  validateUsername,
   verifyPassword,
 } from './auth.js'
 import { loadDb, saveDb } from './db.js'
@@ -161,8 +162,9 @@ app.post('/auth/register', (req, res) => {
     const fullName = String(body.fullName || body.full_name || '').trim()
     const phone = String(body.phone || '').trim()
 
-    if (username.length < 3 || username.length > 24) {
-      return res.status(400).json({ error: 'Username must be 3–24 letters, numbers, or _' })
+    const usernameError = validateUsername(username)
+    if (usernameError) {
+      return res.status(400).json({ error: usernameError })
     }
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' })

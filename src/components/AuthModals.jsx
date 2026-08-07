@@ -23,7 +23,7 @@ function PhotoFields({ photoUrl, setPhotoUrl, photoData, setPhotoData }) {
   return (
     <>
       <div className="field">
-        <label>Profile photo URL (optional)</label>
+        <label>Profile photo URL</label>
         <input
           type="url"
           value={photoUrl}
@@ -38,7 +38,7 @@ function PhotoFields({ photoUrl, setPhotoUrl, photoData, setPhotoData }) {
         <label>Or upload a photo</label>
         <input type="file" accept="image/*" onChange={onFile} />
         <p className="hint" style={{ marginTop: '0.35rem', marginBottom: 0 }}>
-          Keep it small (under ~300KB). You can skip this and add one later.
+          Keep it small (under ~300KB).
         </p>
       </div>
       {err && <div className="banner banner-err">{err}</div>}
@@ -65,8 +65,6 @@ export function AuthModal() {
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
-  const [photoUrl, setPhotoUrl] = useState('')
-  const [photoData, setPhotoData] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -75,8 +73,6 @@ export function AuthModal() {
     setError('')
     setUsername('')
     setPassword('')
-    setPhotoUrl('')
-    setPhotoData('')
     setFullName(registerSeed?.fullName || '')
     setPhone(registerSeed?.phone || '')
   }, [authOpen, registerSeed])
@@ -96,8 +92,6 @@ export function AuthModal() {
           password,
           fullName: fullName || registerSeed?.fullName || '',
           phone: phone || registerSeed?.phone || '',
-          photoUrl: photoUrl.trim() || undefined,
-          photoData: photoData || undefined,
           personId: registerSeed?.personId || undefined,
         })
       } else {
@@ -124,7 +118,7 @@ export function AuthModal() {
         </h2>
         <p className="hint">
           {isRegister
-            ? 'Optional — saves your name and photo for next time. You can still RSVP without an account.'
+            ? 'Optional — saves your name for next time. You can still RSVP without an account. Add a photo anytime after you log in.'
             : 'Optional login. RSVPs work without signing in.'}
         </p>
 
@@ -154,7 +148,7 @@ export function AuthModal() {
           )}
 
           <div className="field">
-            <label>Username</label>
+            <label>Username or email</label>
             <input
               type="text"
               autoComplete="username"
@@ -162,9 +156,8 @@ export function AuthModal() {
               onChange={(e) => setUsername(e.target.value)}
               required
               minLength={3}
-              maxLength={24}
-              pattern="[A-Za-z0-9_]+"
-              placeholder="letters, numbers, _"
+              maxLength={64}
+              placeholder="abe or abe@email.com"
             />
           </div>
           <div className="field">
@@ -178,15 +171,6 @@ export function AuthModal() {
               minLength={6}
             />
           </div>
-
-          {isRegister && (
-            <PhotoFields
-              photoUrl={photoUrl}
-              setPhotoUrl={setPhotoUrl}
-              photoData={photoData}
-              setPhotoData={setPhotoData}
-            />
-          )}
 
           <div className="actions">
             <button type="submit" className="btn btn-primary" disabled={saving}>
@@ -229,8 +213,13 @@ export function AuthModal() {
 }
 
 export function ProfileMenu() {
-  const { user, loading, openLogin, logout } = useAuth()
+  const { user, loading, openLogin, logout, saveProfile } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [editingPhoto, setEditingPhoto] = useState(false)
+  const [photoUrl, setPhotoUrl] = useState('')
+  const [photoData, setPhotoData] = useState('')
+  const [photoError, setPhotoError] = useState('')
+  const [savingPhoto, setSavingPhoto] = useState(false)
 
   if (loading) {
     return <div className="profile-chip profile-chip-loading" aria-hidden="true" />
@@ -250,6 +239,25 @@ export function ProfileMenu() {
 
   const initial = (user.full_name || user.username || '?').charAt(0).toUpperCase()
 
+  async function savePhoto() {
+    setPhotoError('')
+    setSavingPhoto(true)
+    try {
+      await saveProfile({
+        photoUrl: photoData ? undefined : photoUrl.trim() || null,
+        photoData: photoData || undefined,
+      })
+      setEditingPhoto(false)
+      setPhotoUrl('')
+      setPhotoData('')
+      setMenuOpen(false)
+    } catch (ex) {
+      setPhotoError(ex.message || 'Could not save photo')
+    } finally {
+      setSavingPhoto(false)
+    }
+  }
+
   return (
     <div className="profile-menu">
       <button
@@ -257,7 +265,11 @@ export function ProfileMenu() {
         className="profile-chip"
         aria-label={`Profile menu for ${user.username}`}
         aria-expanded={menuOpen}
-        onClick={() => setMenuOpen((v) => !v)}
+        onClick={() => {
+          setMenuOpen((v) => !v)
+          setEditingPhoto(false)
+          setPhotoError('')
+        }}
       >
         {user.photo_url ? (
           <img src={user.photo_url} alt="" />
@@ -271,13 +283,62 @@ export function ProfileMenu() {
             type="button"
             className="profile-menu-scrim"
             aria-label="Close menu"
-            onClick={() => setMenuOpen(false)}
+            onClick={() => {
+              setMenuOpen(false)
+              setEditingPhoto(false)
+            }}
           />
           <div className="profile-dropdown">
             <div className="profile-dropdown-head">
               <strong>{user.full_name || user.username}</strong>
-              <div className="meta">@{user.username}</div>
+              <div className="meta">{user.username}</div>
             </div>
+
+            {!editingPhoto ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ width: '100%', marginBottom: '0.35rem' }}
+                onClick={() => {
+                  setEditingPhoto(true)
+                  setPhotoUrl('')
+                  setPhotoData('')
+                  setPhotoError('')
+                }}
+              >
+                {user.photo_url ? 'Change photo' : 'Add profile photo'}
+              </button>
+            ) : (
+              <div style={{ marginBottom: '0.55rem' }}>
+                <PhotoFields
+                  photoUrl={photoUrl}
+                  setPhotoUrl={setPhotoUrl}
+                  photoData={photoData}
+                  setPhotoData={setPhotoData}
+                />
+                {photoError && (
+                  <div className="banner banner-err">{photoError}</div>
+                )}
+                <div className="actions" style={{ marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={savingPhoto || (!photoData && !photoUrl.trim())}
+                    onClick={savePhoto}
+                  >
+                    {savingPhoto ? 'Saving…' : 'Save photo'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setEditingPhoto(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               className="btn btn-ghost"

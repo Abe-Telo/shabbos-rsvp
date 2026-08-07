@@ -493,7 +493,8 @@ select {
   position: absolute;
   right: 0;
   top: calc(100% + 0.45rem);
-  min-width: 200px;
+  min-width: 260px;
+  max-width: min(340px, 92vw);
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: 14px;

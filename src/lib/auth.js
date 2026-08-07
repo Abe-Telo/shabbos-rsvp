@@ -56,19 +56,38 @@ function publicDemoUser(u) {
 }
 
 function normalizeUsername(raw) {
-  return String(raw || '')
+  const s = String(raw || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '')
+  if (s.includes('@')) {
+    return s.replace(/[^a-z0-9.@_+-]/g, '')
+  }
+  return s.replace(/[^a-z0-9_]/g, '')
+}
+
+function validateUsername(username) {
+  if (!username) return 'Username or email is required'
+  if (username.includes('@')) {
+    if (username.length < 5 || username.length > 64) {
+      return 'Email must be 5–64 characters'
+    }
+    if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(username)) {
+      return 'Enter a valid email, or a username (letters, numbers, _)'
+    }
+    return ''
+  }
+  if (username.length < 3 || username.length > 24) {
+    return 'Username must be 3–24 letters, numbers, or _'
+  }
+  return ''
 }
 
 async function registerDemo(payload) {
   const username = normalizeUsername(payload.username)
   const password = String(payload.password || '')
   const fullName = String(payload.fullName || '').trim()
-  if (username.length < 3 || username.length > 24) {
-    throw new Error('Username must be 3–24 letters, numbers, or _')
-  }
+  const usernameError = validateUsername(username)
+  if (usernameError) throw new Error(usernameError)
   if (password.length < 6) throw new Error('Password must be at least 6 characters')
   if (!fullName) throw new Error('Name is required')
 
