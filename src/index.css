@@ -689,6 +689,35 @@ select {
   border-bottom: 1px solid var(--line);
 }
 
+.profile-menu-item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 0.35rem;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.profile-menu-item:last-child {
+  margin-bottom: 0;
+}
+
+.profile-menu-item:hover {
+  background: rgba(26, 58, 44, 0.08);
+  color: var(--bg-deep);
+}
+
 .profile-preview {
   width: 4.5rem;
   height: 4.5rem;

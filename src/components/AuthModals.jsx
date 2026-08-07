@@ -296,8 +296,7 @@ export function ProfileMenu() {
 
             <Link
               to="/profile"
-              className="btn btn-ghost"
-              style={{ width: '100%', marginBottom: '0.35rem', textAlign: 'center' }}
+              className="profile-menu-item"
               onClick={() => setMenuOpen(false)}
             >
               Profile
@@ -306,8 +305,7 @@ export function ProfileMenu() {
             {!editingPhoto ? (
               <button
                 type="button"
-                className="btn btn-ghost"
-                style={{ width: '100%', marginBottom: '0.35rem' }}
+                className="profile-menu-item"
                 onClick={() => {
                   setEditingPhoto(true)
                   setPhotoUrl('')
@@ -350,8 +348,7 @@ export function ProfileMenu() {
 
             <button
               type="button"
-              className="btn btn-ghost"
-              style={{ width: '100%' }}
+              className="profile-menu-item"
               onClick={async () => {
                 setMenuOpen(false)
                 await logout()
