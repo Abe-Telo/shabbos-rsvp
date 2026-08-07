@@ -1,3 +1,7 @@
+const TOKEN_KEY = 'shabbos-user-token'
+const DEMO_USERS_KEY = 'shabbos-demo-users-v1'
+const DEMO_SESSION_KEY = 'shabbos-demo-user-session-v1'
+
 const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 function uid() {
