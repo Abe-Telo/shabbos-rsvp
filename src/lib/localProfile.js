@@ -10,6 +10,8 @@ const REMEMBERED = [
   'phone',
   'mealStyle',
   'mealStyleOther',
+  'mealStartTime',
+  'mealStartOther',
   'foodLikes',
   'foodLikesOther',
   'heardAbout',

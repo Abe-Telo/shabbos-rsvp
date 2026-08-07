@@ -39,6 +39,13 @@ function foodPrefs(form) {
   if (form.bringingDish) parts.push(`Bringing: ${form.bringingDish}`)
   if (form.mealStyle) parts.push(`Style: ${form.mealStyle}`)
   if (form.mealStyleOther) parts.push(form.mealStyleOther)
+  if (form.mealStartTime) {
+    const start =
+      form.mealStartTime === 'other'
+        ? form.mealStartOther || 'Other'
+        : form.mealStartTime
+    parts.push(`Start: ${start}`)
+  }
   return parts.join(', ')
 }
 
@@ -197,6 +204,8 @@ app.post('/rsvps', (req, res) => {
       coming: form.coming,
       meal_style: form.mealStyle || null,
       meal_style_other: form.mealStyleOther || null,
+      meal_start_time: form.mealStartTime || null,
+      meal_start_other: form.mealStartOther || null,
       food_likes: form.foodLikes || [],
       food_likes_other: form.foodLikesOther || null,
       bringing_dish: dish,

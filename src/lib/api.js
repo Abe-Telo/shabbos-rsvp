@@ -2,6 +2,7 @@ import {
   ATTENDING_VALUES,
   comingOptionLabel,
   emptyForm,
+  mealStartLabel,
   mealStyleLabel,
 } from './formConfig'
 import { adminUnlockUrl, isSupabaseConfigured, supabase } from './supabase'
@@ -49,6 +50,15 @@ function foodPrefsFromForm(form) {
     parts.push(`Style: ${mealStyleLabel(form.mealStyle)}`)
   }
   if (form.mealStyleOther) parts.push(form.mealStyleOther)
+  if (form.mealStartTime) {
+    parts.push(
+      `Start: ${
+        form.mealStartTime === 'other'
+          ? form.mealStartOther || 'Other'
+          : mealStartLabel(form.mealStartTime)
+      }`,
+    )
+  }
   return parts.join(', ')
 }
 
@@ -66,6 +76,8 @@ function rsvpPayload(form, personId, weekStart, id) {
     coming: form.coming,
     meal_style: form.mealStyle || null,
     meal_style_other: form.mealStyleOther || null,
+    meal_start_time: form.mealStartTime || null,
+    meal_start_other: form.mealStartOther || null,
     food_likes: form.foodLikes || [],
     food_likes_other: form.foodLikesOther || null,
     bringing_dish:
@@ -477,6 +489,8 @@ export function rsvpToForm(rsvp, sponsorship = null) {
   form.coming = rsvp.coming || ''
   form.mealStyle = rsvp.meal_style || rsvp.potluck || ''
   form.mealStyleOther = rsvp.meal_style_other || ''
+  form.mealStartTime = rsvp.meal_start_time || ''
+  form.mealStartOther = rsvp.meal_start_other || ''
   form.foodLikes = rsvp.food_likes || rsvp.bringing || []
   form.foodLikesOther = rsvp.food_likes_other || rsvp.bringing_other || ''
   form.bringingDish = rsvp.bringing_dish || ''

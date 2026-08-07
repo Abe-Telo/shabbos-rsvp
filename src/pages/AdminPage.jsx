@@ -98,6 +98,7 @@ export default function AdminPage() {
       'phone',
       'coming',
       'meal_style',
+      'meal_start_time',
       'bringing_dish',
       'food_likes',
       'sponsorship',
@@ -116,6 +117,7 @@ export default function AdminPage() {
           phone: s.phone,
           coming: '',
           meal_style: '',
+          meal_start_time: '',
           bringing_dish: s.potluck_contribution,
           food_likes: [],
           guest_names: '',
@@ -133,6 +135,9 @@ export default function AdminPage() {
           r.phone,
           r.coming,
           r.meal_style || r.potluck,
+          r.meal_start_time === 'other'
+            ? r.meal_start_other || 'Other'
+            : r.meal_start_time || '',
           r.bringing_dish || s.potluck_contribution,
           (r.food_likes || r.bringing || []).join('; '),
           (s.contributions || []).join('; '),

@@ -8,8 +8,10 @@ import {
   foodIconFor,
   GUEST_FILL_OPTIONS,
   HOST_PAYMENT,
+  MEAL_START_OPTIONS,
   MEAL_STYLE_OPTIONS,
   SPONSORSHIP_OPTIONS,
+  mealStartLabel,
   mealStyleLabel,
 } from '../lib/formConfig'
 import {
@@ -51,6 +53,14 @@ function SubmissionSummary({ form }) {
         </div>
         {form.mealStyle && (
           <div className="meta">Meal: {mealStyleLabel(form.mealStyle)}</div>
+        )}
+        {(form.mealStartTime || form.mealStartOther) && (
+          <div className="meta">
+            Prefer start:{' '}
+            {form.mealStartTime === 'other'
+              ? form.mealStartOther || 'Other'
+              : mealStartLabel(form.mealStartTime)}
+          </div>
         )}
         {form.bringingDish && (
           <div className="meta">Bringing: {form.bringingDish}</div>
@@ -118,6 +128,38 @@ function MealPrefsFields({ form, setField, toggleArray }) {
             type="text"
             value={form.mealStyleOther}
             onChange={(e) => setField('mealStyleOther', e.target.value)}
+          />
+        </div>
+      )}
+
+      <div className="field">
+        <label>
+          What time do you prefer to start the meal?{' '}
+          <span className="req">*</span>
+        </label>
+        <div className="choices">
+          {MEAL_START_OPTIONS.map((opt) => (
+            <label className="choice" key={opt.value}>
+              <input
+                type="radio"
+                name="mealStartTime"
+                checked={form.mealStartTime === opt.value}
+                onChange={() => setField('mealStartTime', opt.value)}
+              />
+              <span>{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {form.mealStartTime === 'other' && (
+        <div className="field">
+          <label>What time works for you?</label>
+          <input
+            type="text"
+            value={form.mealStartOther}
+            onChange={(e) => setField('mealStartOther', e.target.value)}
+            placeholder="e.g. after candle lighting, 7:15 PM…"
           />
         </div>
       )}
@@ -291,6 +333,14 @@ export default function FormPage() {
   function goAfterPrefs() {
     if (!form.mealStyle) {
       setError('Please choose whether you prefer host-cooked, potluck, or hybrid.')
+      return
+    }
+    if (!form.mealStartTime) {
+      setError('Please choose what time you prefer to start the meal.')
+      return
+    }
+    if (form.mealStartTime === 'other' && !form.mealStartOther.trim()) {
+      setError('Please write the meal start time that works for you.')
       return
     }
     setError('')

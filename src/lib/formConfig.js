@@ -65,6 +65,23 @@ export const MEAL_STYLE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ]
 
+export const MEAL_START_OPTIONS = [
+  { value: '5:30pm', label: '5:30 PM' },
+  { value: '6:00pm', label: '6:00 PM' },
+  { value: '6:30pm', label: '6:30 PM' },
+  { value: '7:00pm', label: '7:00 PM' },
+  { value: '7:30pm', label: '7:30 PM' },
+  { value: '8:00pm', label: '8:00 PM' },
+  { value: '8:30pm', label: '8:30 PM' },
+  { value: '9:00pm', label: '9:00 PM or later' },
+  { value: 'flexible', label: 'Flexible / no preference' },
+  { value: 'other', label: 'Other' },
+]
+
+export function mealStartLabel(value) {
+  return MEAL_START_OPTIONS.find((o) => o.value === value)?.label || value || ''
+}
+
 export const FOOD_LIKE_OPTIONS = [
   { icon: '🍞', label: 'Challah and dips (use Other to specify dips or challah type)' },
   { icon: '🍆', label: "Abe's Babaganush" },
@@ -156,6 +173,8 @@ export function emptyForm() {
     coming: '',
     mealStyle: '',
     mealStyleOther: '',
+    mealStartTime: '',
+    mealStartOther: '',
     foodLikes: [],
     foodLikesOther: '',
     bringingDish: '',

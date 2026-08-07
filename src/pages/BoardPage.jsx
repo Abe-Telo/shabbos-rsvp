@@ -5,6 +5,7 @@ import { comingLabel, getWeekRsvps } from '../lib/api'
 import {
   comingOptionLabel,
   foodIconFor,
+  mealStartLabel,
   mealStyleLabel,
   PUBLIC_COMING_VALUES,
 } from '../lib/formConfig'
@@ -223,6 +224,14 @@ export default function BoardPage({ defaultTab = 'coming' }) {
                       {style && (
                         <div className="meta">
                           Prefers: {mealStyleLabel(style) || style}
+                        </div>
+                      )}
+                      {(r.meal_start_time || r.meal_start_other) && (
+                        <div className="meta">
+                          Start:{' '}
+                          {r.meal_start_time === 'other'
+                            ? r.meal_start_other || 'Other'
+                            : mealStartLabel(r.meal_start_time)}
                         </div>
                       )}
                       {dish && (
