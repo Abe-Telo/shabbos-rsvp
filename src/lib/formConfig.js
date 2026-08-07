@@ -1,11 +1,7 @@
-/** Weekly Shabbos RSVP — questions corrected from the Google Form. */
+/** Weekly Shabbos RSVP — branching by “Are you coming?” */
 
 export const COMING_OPTIONS = [
-  {
-    value: 'yes',
-    label: 'Yes, I am coming!',
-    next: 'sponsorship',
-  },
+  { value: 'yes', label: 'Yes, I am coming!', next: 'prefs' },
   {
     value: 'yes_guest',
     label: 'Yes, I am coming and bringing a guest',
@@ -14,32 +10,28 @@ export const COMING_OPTIONS = [
   {
     value: 'yes_new',
     label: 'Yes, and I am a newcomer',
-    next: 'invite',
+    next: 'newcomer',
   },
-  {
-    value: 'probably',
-    label: 'Probably yes',
-    next: 'invite',
-  },
+  { value: 'probably', label: 'Probably yes', next: 'probably' },
   {
     value: 'social',
     label: 'Coming later to hang out and socialize',
-    next: 'guests',
+    next: 'social',
   },
   {
     value: 'unsure',
     label: "I'm not sure yet / need to confirm later",
-    next: 'invite',
+    next: 'unsure',
   },
   {
     value: 'no',
     label: "No, I can't make it this time",
-    next: 'submit',
+    next: 'declined',
   },
   {
     value: 'help',
     label: 'I am only here to help with setup/cleanup or to sponsor',
-    next: 'sponsorship',
+    next: 'sponsor_only',
   },
 ]
 
@@ -56,13 +48,9 @@ export const MEAL_STYLE_OPTIONS = [
     value: 'hybrid',
     label: 'Hybrid — host cooks some food and guests bring dishes too',
   },
-  {
-    value: 'other',
-    label: 'Other',
-  },
+  { value: 'other', label: 'Other' },
 ]
 
-/** What guests like to eat (data collecting for the host). */
 export const FOOD_LIKE_OPTIONS = [
   'Chicken soup',
   'Slow roasted beef',
@@ -84,24 +72,18 @@ export const FOOD_LIKE_OPTIONS = [
 export const SPONSORSHIP_OPTIONS = [
   {
     value: 'money',
-    label: 'Yes, I will contribute some money (PayPal / Venmo)',
+    label: 'Yes, I will contribute money (Zelle / Venmo / PayPal)',
   },
-  {
-    value: 'food',
-    label: 'Yes, I will bring a special dish',
-  },
+  { value: 'food', label: 'Yes, I will bring a special dish' },
   {
     value: 'not_this_week',
-    label: "No, I don't want to support this week — maybe next",
+    label: "Not this week — maybe next",
   },
   {
     value: 'setup',
     label: 'I will help with setup / cleanup at the event',
   },
-  {
-    value: 'other',
-    label: 'Other',
-  },
+  { value: 'other', label: 'Other' },
 ]
 
 export const FEEDBACK_OPTIONS = [
@@ -109,6 +91,23 @@ export const FEEDBACK_OPTIONS = [
   { value: 'meh', label: 'Not really / meh' },
   { value: 'other', label: 'Other' },
 ]
+
+export const GUEST_FILL_OPTIONS = [
+  { value: 'yes', label: 'Yes — they will fill out this form themselves' },
+  { value: 'no', label: 'No — I am RSVPing for them' },
+  { value: 'unsure', label: 'Not sure yet' },
+]
+
+/** Host payment details shown on the sponsor page. Edit these anytime. */
+export const HOST_PAYMENT = {
+  zelle: import.meta.env.VITE_ZELLE || 'Update Zelle in site settings',
+  venmo: import.meta.env.VITE_VENMO || '',
+  paypal: import.meta.env.VITE_PAYPAL || '',
+  whatsapp:
+    import.meta.env.VITE_WHATSAPP_LINK ||
+    'Ask the host for the WhatsApp group invite',
+  note: 'Thank you for sponsoring — it helps us keep hosting Shabbos together.',
+}
 
 export const ATTENDING_VALUES = new Set([
   'yes',
@@ -132,9 +131,14 @@ export function emptyForm() {
     bringingDish: '',
     heardAbout: '',
     invitedBy: '',
+    bringingMoreGuests: '',
     guestNames: '',
     guestCount: '',
     guestOvernight: '',
+    guestWillFillForm: '',
+    knowByWhen: '',
+    socialArrivalTime: '',
+    socialNotes: '',
     sponsorship: [],
     sponsorshipNotes: '',
     potluckContribution: '',
