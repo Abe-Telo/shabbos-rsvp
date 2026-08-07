@@ -6,8 +6,12 @@ import {
   mealStyleLabel,
 } from './formConfig'
 import { adminUnlockUrl, isSupabaseConfigured, supabase } from './supabase'
-import { currentSunday } from './week'
-import { loadLastSubmissionThisWeek, saveLastSubmission } from './localProfile'
+import { currentSunday, previousSunday } from './week'
+import {
+  loadLastSubmissionAny,
+  loadLastSubmissionThisWeek,
+  saveLastSubmission,
+} from './localProfile'
 
 
 const LS_KEY = 'shabbos-rsvp-data-v1'
@@ -520,8 +524,8 @@ export function rsvpToForm(rsvp, sponsorship = null) {
   return form
 }
 
-export async function findMyRsvpThisWeek({ fullName, phone } = {}) {
-  const week = currentSunday()
+export async function findMyRsvpForWeek(weekStart, { fullName, phone } = {}) {
+  const week = weekStart || currentSunday()
   if (API_URL) {
     const params = new URLSearchParams({ week })
     if (phone) params.set('phone', phone)
@@ -536,21 +540,40 @@ export async function findMyRsvpThisWeek({ fullName, phone } = {}) {
     }
   }
 
-  // Demo / local: match from localStorage store or last submission
-  const last = loadLastSubmissionThisWeek()
-  if (last?.form) {
-    const phoneKey = normalizePhone(phone || last.form.phone)
-    const name = (fullName || last.form.fullName || '').trim().toLowerCase()
-    const samePhone =
-      phoneKey && normalizePhone(last.form.phone) === phoneKey
-    const sameName =
-      name && last.form.fullName.trim().toLowerCase() === name
-    if (samePhone || sameName || (!phone && !fullName)) {
-      return {
-        form: { ...emptyForm(), ...last.form },
-        rsvp: null,
-        sponsorship: null,
-        week_start: week,
+  if (week === currentSunday()) {
+    const last = loadLastSubmissionThisWeek()
+    if (last?.form) {
+      const phoneKey = normalizePhone(phone || last.form.phone)
+      const name = (fullName || last.form.fullName || '').trim().toLowerCase()
+      const samePhone =
+        phoneKey && normalizePhone(last.form.phone) === phoneKey
+      const sameName =
+        name && last.form.fullName.trim().toLowerCase() === name
+      if (samePhone || sameName || (!phone && !fullName)) {
+        return {
+          form: { ...emptyForm(), ...last.form },
+          rsvp: null,
+          sponsorship: null,
+          week_start: week,
+        }
+      }
+    }
+  } else {
+    const last = loadLastSubmissionAny()
+    if (last?.form && last.week_start === week) {
+      const phoneKey = normalizePhone(phone || last.form.phone)
+      const name = (fullName || last.form.fullName || '').trim().toLowerCase()
+      const samePhone =
+        phoneKey && normalizePhone(last.form.phone) === phoneKey
+      const sameName =
+        name && last.form.fullName.trim().toLowerCase() === name
+      if (samePhone || sameName || (!phone && !fullName)) {
+        return {
+          form: { ...emptyForm(), ...last.form },
+          rsvp: null,
+          sponsorship: null,
+          week_start: week,
+        }
       }
     }
   }
@@ -574,6 +597,14 @@ export async function findMyRsvpThisWeek({ fullName, phone } = {}) {
     sponsorship,
     week_start: week,
   }
+}
+
+export async function findMyRsvpThisWeek(opts) {
+  return findMyRsvpForWeek(currentSunday(), opts)
+}
+
+export async function findMyRsvpLastWeek(opts) {
+  return findMyRsvpForWeek(previousSunday(), opts)
 }
 
 export async function getWeekRsvps(weekStart) {

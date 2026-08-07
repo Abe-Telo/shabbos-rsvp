@@ -476,24 +476,32 @@ app.get('/rsvps/mine', (req, res) => {
   const name = String(req.query.name || '')
     .trim()
     .toLowerCase()
+  const wantPrior = req.query.prior === '1' || req.query.latest === '1'
   const week = req.query.week || currentSunday()
   if (!phoneKey && !name) {
     return res.status(400).json({ error: 'phone or name required' })
   }
   const db = loadDb()
   const matches = db.rsvps.filter((r) => {
-    if (r.week_start !== week) return false
+    if (wantPrior) {
+      if (String(r.week_start || '') >= String(week)) return false
+    } else if (r.week_start !== week) {
+      return false
+    }
     if (phoneKey && digits(r.phone) === phoneKey) return true
     if (name && String(r.full_name || '').toLowerCase() === name) return true
     return false
   })
-  const rsvp = matches.sort((a, b) =>
-    a.created_at < b.created_at ? 1 : -1,
-  )[0]
-  if (!rsvp) return res.json({ rsvp: null, sponsorship: null })
+  const rsvp = matches.sort((a, b) => {
+    if (a.week_start !== b.week_start) {
+      return a.week_start < b.week_start ? 1 : -1
+    }
+    return a.created_at < b.created_at ? 1 : -1
+  })[0]
+  if (!rsvp) return res.json({ rsvp: null, sponsorship: null, week_start: null })
   const sponsorship =
     db.sponsorships.find((s) => s.rsvp_id === rsvp.id) || null
-  res.json({ rsvp, sponsorship })
+  res.json({ rsvp, sponsorship, week_start: rsvp.week_start })
 })
 
 app.get('/people', (_req, res) => {

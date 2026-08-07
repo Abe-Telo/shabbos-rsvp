@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { comingLabel, findMyRsvpThisWeek, submitRsvp } from '../lib/api'
+import { comingLabel, findMyRsvpLastWeek, findMyRsvpThisWeek, submitRsvp } from '../lib/api'
 import {
   COMING_OPTIONS,
   FEEDBACK_OPTIONS,
@@ -20,10 +20,12 @@ import {
   saveRememberedForm,
 } from '../lib/localProfile'
 import { useAuth } from '../lib/AuthContext'
+import { formatWeekLabel, previousSunday } from '../lib/week'
 
 const STEPS = {
   checking: 'checking',
   returning: 'returning',
+  same_as_last: 'same_as_last',
   all_set: 'all_set',
   basics: 'basics',
   prefs: 'prefs',
@@ -257,6 +259,7 @@ export default function FormPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [existing, setExisting] = useState(null)
+  const [lastWeek, setLastWeek] = useState(null)
   const [submittedPersonId, setSubmittedPersonId] = useState(null)
   const remembered =
     Boolean(form.fullName?.trim()) || Boolean(form.phone?.trim())
@@ -274,6 +277,8 @@ export default function FormPage() {
     let cancelled = false
     ;(async () => {
       const seed = loadRememberedForm()
+      if (user?.full_name && !seed.fullName?.trim()) seed.fullName = user.full_name
+      if (user?.phone && !seed.phone?.trim()) seed.phone = user.phone
       if (!seed.fullName?.trim() && !seed.phone?.trim()) {
         if (!cancelled) setStep(STEPS.basics)
         return
@@ -288,9 +293,30 @@ export default function FormPage() {
           setExisting(mine)
           setForm(mine.form)
           setStep(STEPS.returning)
-        } else {
-          setStep(STEPS.basics)
+          return
         }
+        const prior = await findMyRsvpLastWeek({
+          fullName: seed.fullName,
+          phone: seed.phone,
+        })
+        if (cancelled) return
+        if (prior?.form) {
+          setLastWeek(prior)
+          setForm({
+            ...seed,
+            ...prior.form,
+            fullName: prior.form.fullName || seed.fullName,
+            phone: prior.form.phone || seed.phone,
+          })
+          setStep(STEPS.same_as_last)
+          return
+        }
+        setForm((prev) => ({
+          ...prev,
+          fullName: seed.fullName || prev.fullName,
+          phone: seed.phone || prev.phone,
+        }))
+        setStep(STEPS.basics)
       } catch {
         if (!cancelled) setStep(STEPS.basics)
       }
@@ -298,7 +324,7 @@ export default function FormPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     if (step === STEPS.checking) return
@@ -324,6 +350,33 @@ export default function FormPage() {
   function startEdit() {
     setForm(existing?.form || form)
     setStep(STEPS.basics)
+  }
+
+  function startChangesFromLastWeek() {
+    setForm(lastWeek?.form || form)
+    setStep(STEPS.basics)
+  }
+
+  async function submitSameAsLastWeek() {
+    if (!lastWeek?.form) return
+    setForm(lastWeek.form)
+    setSaving(true)
+    setError('')
+    try {
+      saveRememberedForm(lastWeek.form)
+      const result = await submitRsvp(lastWeek.form)
+      setExisting({
+        form: { ...lastWeek.form },
+        week_start: result?.rsvp?.week_start,
+      })
+      setSubmittedPersonId(result?.person?.id || null)
+      if (user) setStep(STEPS.done)
+      else setStep(STEPS.offer_profile)
+    } catch (e) {
+      setError(e.message || 'Could not save. Try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function finish() {
@@ -556,6 +609,48 @@ export default function FormPage() {
             </button>
             <button type="button" className="btn btn-accent" onClick={startEdit}>
               Yes, I need to change it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === STEPS.same_as_last && (
+        <div className="panel">
+          <h2>New week — same as last week?</h2>
+          <p className="hint">
+            Last week ({formatWeekLabel(lastWeek?.week_start || previousSunday())})
+            you answered:
+          </p>
+          {lastWeek?.form && (
+            <div className="field" style={{ marginTop: '0.75rem' }}>
+              <label>Are you coming this week?</label>
+              <div className="choices">
+                <label className="choice" style={{ background: 'rgba(243, 235, 224, 0.9)' }}>
+                  <input type="radio" checked readOnly />
+                  <span>{comingLabel(lastWeek.form.coming)}</span>
+                </label>
+              </div>
+              <SubmissionSummary form={lastWeek.form} />
+            </div>
+          )}
+          <p className="hint">
+            Use the same answers for this week, or make changes.
+          </p>
+          <div className="actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={saving}
+              onClick={submitSameAsLastWeek}
+            >
+              {saving ? 'Submitting…' : 'Same as last week — submit'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-accent"
+              onClick={startChangesFromLastWeek}
+            >
+              I want to make changes
             </button>
           </div>
         </div>

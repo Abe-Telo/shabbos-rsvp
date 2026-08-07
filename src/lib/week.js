@@ -38,3 +38,10 @@ export function formatCountdown(ms) {
   const hours = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
   return `${days}d ${hours}h`
 }
+
+/** Sunday date string for the week before the current one. */
+export function previousSunday(date = new Date()) {
+  const d = new Date(`${currentSunday(date)}T12:00:00`)
+  d.setDate(d.getDate() - 7)
+  return formatDate(d)
+}

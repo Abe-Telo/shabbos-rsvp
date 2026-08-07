@@ -81,3 +81,14 @@ export function loadLastSubmissionThisWeek() {
     return null
   }
 }
+
+/** Most recent saved submission on this device (any week). */
+export function loadLastSubmissionAny() {
+  try {
+    const raw = localStorage.getItem(LAST_SUBMISSION_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
