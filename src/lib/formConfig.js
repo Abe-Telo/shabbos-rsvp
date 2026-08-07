@@ -1,50 +1,112 @@
+/** Weekly Shabbos RSVP — questions corrected from the Google Form. */
+
 export const COMING_OPTIONS = [
-  { value: 'yes', label: 'Yes, I am coming!', next: 'basics_more' },
-  { value: 'yes_guest', label: 'Yes… and bringing a guest', next: 'basics_more' },
-  { value: 'yes_new', label: 'Yes, and I am a new contact', next: 'basics_more' },
-  { value: 'probably', label: 'Probably yes', next: 'basics_more' },
-  { value: 'social', label: 'Coming later for social time', next: 'basics_more' },
-  { value: 'no', label: "No, I can't make it this time", next: 'submit' },
-  { value: 'help', label: 'I am only here to help or sponsor', next: 'basics_more' },
-  { value: 'unsure', label: 'I am not sure yet', next: 'basics_more' },
+  {
+    value: 'yes',
+    label: 'Yes, I am coming!',
+    next: 'sponsorship',
+  },
+  {
+    value: 'yes_guest',
+    label: 'Yes, I am coming and bringing a guest',
+    next: 'guests',
+  },
+  {
+    value: 'yes_new',
+    label: 'Yes, and I am a newcomer',
+    next: 'invite',
+  },
+  {
+    value: 'probably',
+    label: 'Probably yes',
+    next: 'invite',
+  },
+  {
+    value: 'social',
+    label: 'Coming later to hang out and socialize',
+    next: 'guests',
+  },
+  {
+    value: 'unsure',
+    label: "I'm not sure yet / need to confirm later",
+    next: 'invite',
+  },
+  {
+    value: 'no',
+    label: "No, I can't make it this time",
+    next: 'submit',
+  },
+  {
+    value: 'help',
+    label: 'I am only here to help with setup/cleanup or to sponsor',
+    next: 'sponsorship',
+  },
 ]
 
-export const POTLUCK_OPTIONS = [
-  { value: 'self', label: 'We buy and cook everything ourselves!' },
-  { value: 'potluck', label: 'Potluck (We bring something to share)' },
-  { value: 'hybrid', label: 'Hybrid' },
-  { value: 'other', label: 'Other' },
+export const MEAL_STYLE_OPTIONS = [
+  {
+    value: 'host_cook',
+    label: 'Host cooks — I just come as I am to feast',
+  },
+  {
+    value: 'potluck',
+    label: 'Potluck — everyone brings a dish',
+  },
+  {
+    value: 'hybrid',
+    label: 'Hybrid — host cooks some food and guests bring dishes too',
+  },
+  {
+    value: 'other',
+    label: 'Other',
+  },
 ]
 
-export const BRINGING_OPTIONS = [
-  'Challah and dips',
-  'Main dish (meat)',
-  'Side dish',
-  'Salad / Vegetables',
-  'Soft Drinks',
-  'Alcohol',
-  'Dessert',
-  'Cutlery',
-  'Dishes',
-  'Cups',
-  'Napkins',
-  'Fruit',
-  'Snacks',
-  'Hot Food',
-  'Other (Please specify)',
+/** What guests like to eat (data collecting for the host). */
+export const FOOD_LIKE_OPTIONS = [
+  'Chicken soup',
+  'Slow roasted beef',
+  'Salmon fillet',
+  'Salmon patties',
+  'Garlic potato',
+  'Potato kugel',
+  'Salad',
+  'Challah',
+  'Matzo',
+  'Rice',
+  'Corn',
+  'Broccoli',
+  'Peas',
+  'Mixed salad',
+  'Other',
 ]
 
 export const SPONSORSHIP_OPTIONS = [
-  { value: 'money', label: 'Yes, I will sponsor money (for the host to buy food/supplies)' },
-  { value: 'food', label: 'Yes, I will bring a food item' },
-  { value: 'cant', label: "No, I can't afford anything this week" },
-  { value: 'other_ways', label: 'I will contribute in other ways' },
-  { value: 'other', label: 'Other' },
+  {
+    value: 'money',
+    label: 'Yes, I will contribute some money (PayPal / Venmo)',
+  },
+  {
+    value: 'food',
+    label: 'Yes, I will bring a special dish',
+  },
+  {
+    value: 'not_this_week',
+    label: "No, I don't want to support this week — maybe next",
+  },
+  {
+    value: 'setup',
+    label: 'I will help with setup / cleanup at the event',
+  },
+  {
+    value: 'other',
+    label: 'Other',
+  },
 ]
 
 export const FEEDBACK_OPTIONS = [
-  { value: 'form', label: 'This form / website' },
-  { value: 'whatsapp', label: 'WhatsApp Poll' },
+  { value: 'yes', label: 'Of course' },
+  { value: 'meh', label: 'Not really / meh' },
   { value: 'other', label: 'Other' },
 ]
 
@@ -54,6 +116,7 @@ export const ATTENDING_VALUES = new Set([
   'yes_new',
   'probably',
   'social',
+  'unsure',
   'help',
 ])
 
@@ -62,18 +125,23 @@ export function emptyForm() {
     fullName: '',
     phone: '',
     coming: '',
-    potluck: '',
-    bringing: [],
-    bringingOther: '',
-    dietaryNotes: '',
+    mealStyle: '',
+    mealStyleOther: '',
+    foodLikes: [],
+    foodLikesOther: '',
+    heardAbout: '',
+    invitedBy: '',
     guestNames: '',
     guestCount: '',
     guestOvernight: '',
-    newcomerNotes: '',
     sponsorship: [],
     sponsorshipNotes: '',
     potluckContribution: '',
     feedback: '',
     feedbackNotes: '',
   }
+}
+
+export function mealStyleLabel(value) {
+  return MEAL_STYLE_OPTIONS.find((o) => o.value === value)?.label || value || ''
 }

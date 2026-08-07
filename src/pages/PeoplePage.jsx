@@ -35,7 +35,8 @@ export default function PeoplePage() {
         <h1>People log</h1>
         <p>
           Everyone who has ever joined — contact info, how many times they came,
-          and what they like eating. This list does not reset on Sunday.
+          meal style preference, and what they like eating. This list does not
+          reset on Sunday.
         </p>
       </section>
 

@@ -52,7 +52,7 @@ export default function Layout() {
       </main>
 
       <footer className="site-footer">
-        Bi-weekly Shabbos coordination · answers public · sponsorship admin-only
+        Weekly Shabbos RSVP · answers public · sponsorship admin-only
       </footer>
     </div>
   )

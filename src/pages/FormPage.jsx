@@ -2,18 +2,18 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { submitRsvp } from '../lib/api'
 import {
-  BRINGING_OPTIONS,
   COMING_OPTIONS,
   emptyForm,
   FEEDBACK_OPTIONS,
-  POTLUCK_OPTIONS,
+  FOOD_LIKE_OPTIONS,
+  MEAL_STYLE_OPTIONS,
   SPONSORSHIP_OPTIONS,
 } from '../lib/formConfig'
 
 const STEPS = {
   basics: 'basics',
-  basics_more: 'basics_more',
-  newcomer: 'newcomer',
+  prefs: 'prefs',
+  invite: 'invite',
   guests: 'guests',
   sponsorship: 'sponsorship',
   feedback: 'feedback',
@@ -21,8 +21,7 @@ const STEPS = {
 }
 
 function nextFromComing(coming) {
-  const opt = COMING_OPTIONS.find((o) => o.value === coming)
-  return opt?.next || 'basics_more'
+  return COMING_OPTIONS.find((o) => o.value === coming)?.next || 'prefs'
 }
 
 export default function FormPage() {
@@ -65,9 +64,10 @@ export default function FormPage() {
     }
   }
 
+  /** After name / phone / coming — branch like the Google Form. */
   function goAfterBasics() {
     if (!form.fullName.trim() || !form.phone.trim() || !form.coming) {
-      setError('Please fill name, phone, and whether you are coming.')
+      setError('Please fill your name, phone, and whether you are coming.')
       return
     }
     setError('')
@@ -76,33 +76,28 @@ export default function FormPage() {
       finish()
       return
     }
-    if (next === 'basics_more') {
-      setStep(STEPS.basics_more)
-      return
-    }
-    if (next === 'newcomer') {
-      setStep(STEPS.newcomer)
-      return
-    }
-    if (next === 'guests') {
-      setStep(STEPS.guests)
-      return
-    }
-    if (next === 'sponsorship') {
-      setStep(STEPS.sponsorship)
-    }
+    // Everyone who continues first shares meal style + food likes
+    setStep(STEPS.prefs)
   }
 
-  function goAfterBasicsMore() {
-    // Branching mirrors the Google Form “go to section” rules after meal questions.
-    if (form.coming === 'yes_guest' || form.coming === 'social') {
-      setStep(STEPS.guests)
-    } else if (form.coming === 'yes_new') {
-      setStep(STEPS.newcomer)
-    } else {
-      // yes, probably, unsure, help → sponsorship (private)
-      setStep(STEPS.sponsorship)
+  /** After food prefs — go to invite, guests, or sponsorship. */
+  function goAfterPrefs() {
+    if (!form.mealStyle) {
+      setError('Please choose whether you prefer host-cooked, potluck, or hybrid.')
+      return
     }
+    setError('')
+    const next = nextFromComing(form.coming)
+    if (next === 'guests') setStep(STEPS.guests)
+    else if (next === 'invite') setStep(STEPS.invite)
+    else setStep(STEPS.sponsorship)
+  }
+
+  function backFromSponsorship() {
+    const next = nextFromComing(form.coming)
+    if (next === 'guests') setStep(STEPS.guests)
+    else if (next === 'invite') setStep(STEPS.invite)
+    else setStep(STEPS.prefs)
   }
 
   function resetForm() {
@@ -142,8 +137,8 @@ export default function FormPage() {
       <section className="hero">
         <h1>Shabbos RSVP</h1>
         <p>
-          Fill this out to RSVP and coordinate for our upcoming Shabbos
-          gathering. The form adapts based on your answers.
+          Weekly Shabbos gathering — please RSVP so we know who&apos;s coming,
+          what you like to eat, and whether you prefer potluck or host cooking.
         </p>
       </section>
 
@@ -151,32 +146,32 @@ export default function FormPage() {
 
       {step === STEPS.basics && (
         <div className="panel">
-          <h2>Basic information & RSVP</h2>
-          <p className="hint">Required fields marked with *</p>
+          <h2>Weekly Shabbos RSVP & coordination</h2>
+          <p className="hint">
+            Fill this out for our upcoming Shabbos. Required fields marked with *
+          </p>
 
           <div className="field">
             <label>
-              Full Name <span className="req">*</span>
+              Your full name <span className="req">*</span>
             </label>
             <input
               type="text"
               value={form.fullName}
               onChange={(e) => setField('fullName', e.target.value)}
               autoComplete="name"
-              required
             />
           </div>
 
           <div className="field">
             <label>
-              Phone Number <span className="req">*</span>
+              Your phone number <span className="req">*</span>
             </label>
             <input
               type="tel"
               value={form.phone}
               onChange={(e) => setField('phone', e.target.value)}
               autoComplete="tel"
-              required
             />
           </div>
 
@@ -216,21 +211,26 @@ export default function FormPage() {
         </div>
       )}
 
-      {step === STEPS.basics_more && (
+      {step === STEPS.prefs && (
         <div className="panel">
-          <h2>Meal plan & what you&apos;re bringing</h2>
-          <p className="hint">Helps us coordinate food and supplies.</p>
+          <h2>How you like Shabbos meals</h2>
+          <p className="hint">
+            Helps the host plan — potluck vs cooking for everyone, and what you
+            actually like to eat.
+          </p>
 
           <div className="field">
-            <label>Are you part of a potluck or meal-plan?</label>
+            <label>
+              Do you prefer potluck or host cook? <span className="req">*</span>
+            </label>
             <div className="choices">
-              {POTLUCK_OPTIONS.map((opt) => (
+              {MEAL_STYLE_OPTIONS.map((opt) => (
                 <label className="choice" key={opt.value}>
                   <input
                     type="radio"
-                    name="potluck"
-                    checked={form.potluck === opt.value}
-                    onChange={() => setField('potluck', opt.value)}
+                    name="mealStyle"
+                    checked={form.mealStyle === opt.value}
+                    onChange={() => setField('mealStyle', opt.value)}
                   />
                   <span>{opt.label}</span>
                 </label>
@@ -238,15 +238,28 @@ export default function FormPage() {
             </div>
           </div>
 
+          {form.mealStyle === 'other' && (
+            <div className="field">
+              <label>Please explain</label>
+              <input
+                type="text"
+                value={form.mealStyleOther}
+                onChange={(e) => setField('mealStyleOther', e.target.value)}
+              />
+            </div>
+          )}
+
           <div className="field">
-            <label>What are you bringing?</label>
+            <label>
+              What do you like to eat? Choose only what you would eat.
+            </label>
             <div className="checkbox-grid">
-              {BRINGING_OPTIONS.map((item) => (
+              {FOOD_LIKE_OPTIONS.map((item) => (
                 <label className="choice" key={item}>
                   <input
                     type="checkbox"
-                    checked={form.bringing.includes(item)}
-                    onChange={() => toggleArray('bringing', item)}
+                    checked={form.foodLikes.includes(item)}
+                    onChange={() => toggleArray('foodLikes', item)}
                   />
                   <span>{item}</span>
                 </label>
@@ -254,25 +267,16 @@ export default function FormPage() {
             </div>
           </div>
 
-          {form.bringing.includes('Other (Please specify)') && (
+          {form.foodLikes.includes('Other') && (
             <div className="field">
-              <label>Other — please specify</label>
+              <label>Other foods you like</label>
               <input
                 type="text"
-                value={form.bringingOther}
-                onChange={(e) => setField('bringingOther', e.target.value)}
+                value={form.foodLikesOther}
+                onChange={(e) => setField('foodLikesOther', e.target.value)}
               />
             </div>
           )}
-
-          <div className="field">
-            <label>Dietary preferences / what you like eating</label>
-            <textarea
-              value={form.dietaryNotes}
-              onChange={(e) => setField('dietaryNotes', e.target.value)}
-              placeholder="e.g. vegetarian, loves cholent, no nuts…"
-            />
-          </div>
 
           <div className="actions">
             <button
@@ -282,70 +286,33 @@ export default function FormPage() {
             >
               Back
             </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={goAfterBasicsMore}
-            >
+            <button type="button" className="btn btn-primary" onClick={goAfterPrefs}>
               Continue
             </button>
           </div>
         </div>
       )}
 
-      {step === STEPS.newcomer && (
+      {step === STEPS.invite && (
         <div className="panel">
-          <h2>Welcome — invite list</h2>
-          <p className="hint">
-            Glad you&apos;re joining. Anything helpful for the host to know?
-          </p>
+          <h2>Invite list</h2>
+          <p className="hint">Optional — helps us say thank you and grow the group.</p>
+
           <div className="field">
-            <label>Notes for the host (optional)</label>
-            <textarea
-              value={form.newcomerNotes}
-              onChange={(e) => setField('newcomerNotes', e.target.value)}
-              placeholder="How you heard about us, who invited you…"
+            <label>How did you hear about us?</label>
+            <input
+              type="text"
+              value={form.heardAbout}
+              onChange={(e) => setField('heardAbout', e.target.value)}
             />
           </div>
 
           <div className="field">
-            <label>Are you part of a potluck or meal-plan?</label>
-            <div className="choices">
-              {POTLUCK_OPTIONS.map((opt) => (
-                <label className="choice" key={opt.value}>
-                  <input
-                    type="radio"
-                    name="potluck"
-                    checked={form.potluck === opt.value}
-                    onChange={() => setField('potluck', opt.value)}
-                  />
-                  <span>{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <label>What are you bringing?</label>
-            <div className="checkbox-grid">
-              {BRINGING_OPTIONS.map((item) => (
-                <label className="choice" key={item}>
-                  <input
-                    type="checkbox"
-                    checked={form.bringing.includes(item)}
-                    onChange={() => toggleArray('bringing', item)}
-                  />
-                  <span>{item}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <label>Dietary preferences / what you like eating</label>
-            <textarea
-              value={form.dietaryNotes}
-              onChange={(e) => setField('dietaryNotes', e.target.value)}
+            <label>If someone invited you, who was it? (so we can say thanks!)</label>
+            <input
+              type="text"
+              value={form.invitedBy}
+              onChange={(e) => setField('invitedBy', e.target.value)}
             />
           </div>
 
@@ -353,7 +320,7 @@ export default function FormPage() {
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => setStep(STEPS.basics)}
+              onClick={() => setStep(STEPS.prefs)}
             >
               Back
             </button>
@@ -362,7 +329,7 @@ export default function FormPage() {
               className="btn btn-primary"
               onClick={() => setStep(STEPS.sponsorship)}
             >
-              Continue
+              Continue to sponsorship
             </button>
           </div>
         </div>
@@ -371,12 +338,10 @@ export default function FormPage() {
       {step === STEPS.guests && (
         <div className="panel">
           <h2>Guest list options</h2>
-          <p className="hint">How many guests are joining?</p>
+          <p className="hint">Please tell us how many other guests you are bringing.</p>
 
           <div className="field">
-            <label>
-              If you are bringing a guest, who would it be (to help keep track)
-            </label>
+            <label>Guest names (to help keep track)</label>
             <input
               type="text"
               value={form.guestNames}
@@ -412,44 +377,11 @@ export default function FormPage() {
             </div>
           </div>
 
-          <div className="field">
-            <label>Are you part of a potluck or meal-plan?</label>
-            <div className="choices">
-              {POTLUCK_OPTIONS.map((opt) => (
-                <label className="choice" key={opt.value}>
-                  <input
-                    type="radio"
-                    name="potluck"
-                    checked={form.potluck === opt.value}
-                    onChange={() => setField('potluck', opt.value)}
-                  />
-                  <span>{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <label>What are you bringing?</label>
-            <div className="checkbox-grid">
-              {BRINGING_OPTIONS.map((item) => (
-                <label className="choice" key={item}>
-                  <input
-                    type="checkbox"
-                    checked={form.bringing.includes(item)}
-                    onChange={() => toggleArray('bringing', item)}
-                  />
-                  <span>{item}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
           <div className="actions">
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => setStep(STEPS.basics)}
+              onClick={() => setStep(STEPS.prefs)}
             >
               Back
             </button>
@@ -458,7 +390,7 @@ export default function FormPage() {
               className="btn btn-primary"
               onClick={() => setStep(STEPS.sponsorship)}
             >
-              Continue
+              Continue to sponsorship
             </button>
           </div>
         </div>
@@ -467,16 +399,16 @@ export default function FormPage() {
       {step === STEPS.sponsorship && (
         <div className="panel">
           <h2>
-            Sponsorship
+            Go above and beyond
             <span className="private-badge">Admin only</span>
           </h2>
           <p className="hint">
-            Optional but helpful. Money-related answers are never shown on the
-            public board — only the host can see them after unlocking Admin.
+            Optional — help make our Shabbos gathering beautiful and special.
+            Money answers stay private for the host only.
           </p>
 
           <div className="field">
-            <label>Would you like to contribute or sponsor this week?</label>
+            <label>Would you like to contribute or sponsor? (optional)</label>
             <div className="choices">
               {SPONSORSHIP_OPTIONS.map((opt) => (
                 <label className="choice" key={opt.value}>
@@ -491,43 +423,44 @@ export default function FormPage() {
             </div>
           </div>
 
-          <div className="field">
-            <label>Potluck contribution item / amount notes</label>
-            <input
-              type="text"
-              value={form.potluckContribution}
-              onChange={(e) => setField('potluckContribution', e.target.value)}
-              placeholder="e.g. $20, or challah for 12"
-            />
-          </div>
+          {(form.sponsorship.includes('food') ||
+            form.mealStyle === 'potluck' ||
+            form.mealStyle === 'hybrid') && (
+            <div className="field">
+              <label>Potluck dish description</label>
+              <input
+                type="text"
+                value={form.potluckContribution}
+                onChange={(e) => setField('potluckContribution', e.target.value)}
+                placeholder="What dish will you bring?"
+              />
+            </div>
+          )}
 
-          <div className="field">
-            <label>Anything else private for the host?</label>
-            <textarea
-              value={form.sponsorshipNotes}
-              onChange={(e) => setField('sponsorshipNotes', e.target.value)}
-            />
-          </div>
+          {form.sponsorship.includes('money') && (
+            <div className="field">
+              <label>Amount / notes for the host (private)</label>
+              <input
+                type="text"
+                value={form.sponsorshipNotes}
+                onChange={(e) => setField('sponsorshipNotes', e.target.value)}
+                placeholder="e.g. $20 via Venmo"
+              />
+            </div>
+          )}
+
+          {form.sponsorship.includes('other') && !form.sponsorship.includes('money') && (
+            <div className="field">
+              <label>Please explain</label>
+              <textarea
+                value={form.sponsorshipNotes}
+                onChange={(e) => setField('sponsorshipNotes', e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="actions">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => {
-                if (form.coming === 'yes_guest' || form.coming === 'social') {
-                  setStep(STEPS.guests)
-                } else if (form.coming === 'yes_new') {
-                  setStep(STEPS.newcomer)
-                } else if (
-                  form.coming === 'probably' ||
-                  form.coming === 'unsure'
-                ) {
-                  setStep(STEPS.basics_more)
-                } else {
-                  setStep(STEPS.basics)
-                }
-              }}
-            >
+            <button type="button" className="btn btn-ghost" onClick={backFromSponsorship}>
               Back
             </button>
             <button
@@ -545,11 +478,11 @@ export default function FormPage() {
         <div className="panel">
           <h2>Quick feedback</h2>
           <p className="hint">
-            Do you enjoy this form over a WhatsApp call? How should we improve?
+            Do you enjoy this form for Shabbos gatherings? How should we improve?
           </p>
 
           <div className="field">
-            <label>Preferred coordination</label>
+            <label>Feedback</label>
             <div className="choices">
               {FEEDBACK_OPTIONS.map((opt) => (
                 <label className="choice" key={opt.value}>
@@ -565,13 +498,15 @@ export default function FormPage() {
             </div>
           </div>
 
-          <div className="field">
-            <label>Comments</label>
-            <textarea
-              value={form.feedbackNotes}
-              onChange={(e) => setField('feedbackNotes', e.target.value)}
-            />
-          </div>
+          {(form.feedback === 'other' || form.feedback === 'meh') && (
+            <div className="field">
+              <label>Comments</label>
+              <textarea
+                value={form.feedbackNotes}
+                onChange={(e) => setField('feedbackNotes', e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="actions">
             <button

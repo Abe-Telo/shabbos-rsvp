@@ -1,4 +1,4 @@
-import { ATTENDING_VALUES } from './formConfig'
+import { ATTENDING_VALUES, mealStyleLabel } from './formConfig'
 import { adminUnlockUrl, isSupabaseConfigured, supabase } from './supabase'
 import { currentSunday } from './week'
 
@@ -28,14 +28,46 @@ function normalizePhone(phone) {
 }
 
 function foodPrefsFromForm(form) {
-  const parts = [...(form.bringing || [])]
-  if (form.bringingOther) parts.push(form.bringingOther)
-  if (form.dietaryNotes) parts.push(form.dietaryNotes)
+  const parts = [...(form.foodLikes || [])]
+  if (form.foodLikesOther) parts.push(form.foodLikesOther)
+  if (form.mealStyle) {
+    parts.push(`Style: ${mealStyleLabel(form.mealStyle)}`)
+  }
+  if (form.mealStyleOther) parts.push(form.mealStyleOther)
   return parts.join(', ')
 }
 
 function isAttending(coming) {
   return ATTENDING_VALUES.has(coming)
+}
+
+function rsvpPayload(form, personId, weekStart, id) {
+  return {
+    id,
+    person_id: personId,
+    week_start: weekStart,
+    full_name: form.fullName.trim(),
+    phone: form.phone.trim(),
+    coming: form.coming,
+    meal_style: form.mealStyle || null,
+    meal_style_other: form.mealStyleOther || null,
+    food_likes: form.foodLikes || [],
+    food_likes_other: form.foodLikesOther || null,
+    // legacy aliases for older board display
+    potluck: form.mealStyle || null,
+    bringing: form.foodLikes || [],
+    bringing_other: form.foodLikesOther || null,
+    dietary_notes: null,
+    guest_names: form.guestNames || null,
+    guest_count: form.guestCount ? Number(form.guestCount) : null,
+    guest_overnight: form.guestOvernight || null,
+    heard_about: form.heardAbout || null,
+    invited_by: form.invitedBy || null,
+    newcomer_notes: [form.heardAbout, form.invitedBy].filter(Boolean).join(' · ') || null,
+    feedback: form.feedback || null,
+    feedback_notes: form.feedbackNotes || null,
+    created_at: new Date().toISOString(),
+  }
 }
 
 /* ---------- Local / demo mode ---------- */
@@ -103,25 +135,7 @@ async function submitLocal(form) {
   data.sponsorships = data.sponsorships.filter((s) => !oldIds.includes(s.rsvp_id))
 
   const rsvpId = uid()
-  const rsvp = {
-    id: rsvpId,
-    person_id: person.id,
-    week_start: weekStart,
-    full_name: form.fullName.trim(),
-    phone: form.phone.trim(),
-    coming: form.coming,
-    potluck: form.potluck || null,
-    bringing: form.bringing || [],
-    bringing_other: form.bringingOther || null,
-    dietary_notes: form.dietaryNotes || null,
-    guest_names: form.guestNames || null,
-    guest_count: form.guestCount ? Number(form.guestCount) : null,
-    guest_overnight: form.guestOvernight || null,
-    newcomer_notes: form.newcomerNotes || null,
-    feedback: form.feedback || null,
-    feedback_notes: form.feedbackNotes || null,
-    created_at: new Date().toISOString(),
-  }
+  const rsvp = rsvpPayload(form, person.id, weekStart, rsvpId)
   data.rsvps.push(rsvp)
 
   if (form.sponsorship?.length || form.sponsorshipNotes || form.potluckContribution) {
@@ -276,14 +290,15 @@ async function submitSupabase(form) {
       full_name: form.fullName.trim(),
       phone: form.phone.trim(),
       coming: form.coming,
-      potluck: form.potluck || null,
-      bringing: form.bringing || [],
-      bringing_other: form.bringingOther || null,
-      dietary_notes: form.dietaryNotes || null,
+      potluck: form.mealStyle || null,
+      bringing: form.foodLikes || [],
+      bringing_other: form.foodLikesOther || null,
+      dietary_notes: form.mealStyleOther || null,
       guest_names: form.guestNames || null,
       guest_count: form.guestCount ? Number(form.guestCount) : null,
       guest_overnight: form.guestOvernight || null,
-      newcomer_notes: form.newcomerNotes || null,
+      newcomer_notes:
+        [form.heardAbout, form.invitedBy].filter(Boolean).join(' · ') || null,
       feedback: form.feedback || null,
       feedback_notes: form.feedbackNotes || null,
     })
@@ -407,12 +422,12 @@ export function comingLabel(value) {
   const map = {
     yes: 'Coming',
     yes_guest: 'Coming + guest',
-    yes_new: 'New contact',
+    yes_new: 'Newcomer',
     probably: 'Probably yes',
-    social: 'Social time',
+    social: 'Social / hang out',
+    unsure: 'Not sure yet',
     no: "Can't make it",
     help: 'Helping / sponsoring',
-    unsure: 'Not sure yet',
   }
   return map[value] || value
 }

@@ -9,11 +9,14 @@ import {
 import { currentSunday, formatWeekLabel } from '../lib/week'
 
 const CONTRIB_LABELS = {
-  money: 'Sponsor money',
-  food: 'Bring food item',
+  money: 'Contribute money (PayPal / Venmo)',
+  food: 'Bring a special dish',
+  not_this_week: 'Not this week — maybe next',
+  setup: 'Help with setup / cleanup',
+  other: 'Other',
+  // legacy
   cant: "Can't afford this week",
   other_ways: 'Other ways',
-  other: 'Other',
 }
 
 export default function AdminPage() {
