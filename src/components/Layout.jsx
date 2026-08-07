@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { AuthModal, ProfileMenu } from './AuthModals'
 import { storageMode } from '../lib/api'
 import {
@@ -7,12 +8,13 @@ import {
   formatWeekLabel,
   msUntilNextSunday,
 } from '../lib/week'
-import { useEffect, useState } from 'react'
 
 export default function Layout() {
+  const location = useLocation()
   const [countdown, setCountdown] = useState(formatCountdown(msUntilNextSunday()))
   const week = currentSunday()
   const demo = storageMode() === 'demo'
+  const wide = location.pathname.startsWith('/admin')
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -22,7 +24,7 @@ export default function Layout() {
   }, [])
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${wide ? ' app-shell-wide' : ''}`}>
       <header className="site-header">
         <div className="site-header-inner">
           <NavLink to="/" className="brand">
@@ -43,7 +45,7 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="main">
+      <main className={`main${wide ? ' main-wide' : ''}`}>
         {demo && (
           <div className="banner banner-demo">
             Demo mode — data stays in this browser until a shared database is
