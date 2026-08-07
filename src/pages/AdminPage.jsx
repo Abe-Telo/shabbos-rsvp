@@ -91,7 +91,7 @@ export default function AdminPage() {
           <p className="hint">
             {storageMode() === 'demo'
               ? 'Demo password is in .env.example (default: shabbos-admin).'
-              : 'Password is the ADMIN_PASSWORD secret on your Supabase Edge Function.'}
+              : 'Use the host master password for private sponsorship data.'}
           </p>
           {error && <div className="banner banner-err">{error}</div>}
           <form onSubmit={onUnlock}>

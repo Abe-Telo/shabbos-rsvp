@@ -41,8 +41,8 @@ export default function Layout() {
       <main className="main">
         {demo && (
           <div className="banner banner-demo">
-            Demo mode — data stays in this browser until you connect Supabase
-            (see README).
+            Demo mode — data stays in this browser until a shared database is
+            connected.
           </div>
         )}
         <div className="week-chip" style={{ marginBottom: '1rem' }}>

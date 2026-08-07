@@ -5,6 +5,14 @@ import { currentSunday } from './week'
 const LS_KEY = 'shabbos-rsvp-data-v1'
 const ADMIN_SESSION_KEY = 'shabbos-admin-session'
 
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
+export function storageMode() {
+  if (API_URL) return 'api'
+  if (isSupabaseConfigured) return 'supabase'
+  return 'demo'
+}
+
 function uid() {
   return crypto.randomUUID()
 }
@@ -53,7 +61,6 @@ function rsvpPayload(form, personId, weekStart, id) {
     meal_style_other: form.mealStyleOther || null,
     food_likes: form.foodLikes || [],
     food_likes_other: form.foodLikesOther || null,
-    // legacy aliases for older board display
     potluck: form.mealStyle || null,
     bringing: form.foodLikes || [],
     bringing_other: form.foodLikesOther || null,
@@ -63,11 +70,58 @@ function rsvpPayload(form, personId, weekStart, id) {
     guest_overnight: form.guestOvernight || null,
     heard_about: form.heardAbout || null,
     invited_by: form.invitedBy || null,
-    newcomer_notes: [form.heardAbout, form.invitedBy].filter(Boolean).join(' · ') || null,
+    newcomer_notes:
+      [form.heardAbout, form.invitedBy].filter(Boolean).join(' · ') || null,
     feedback: form.feedback || null,
     feedback_notes: form.feedbackNotes || null,
     created_at: new Date().toISOString(),
   }
+}
+
+/* ---------- Shared HTTP API ---------- */
+
+async function api(path, options = {}) {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`)
+  return body
+}
+
+async function submitApi(form) {
+  return api('/rsvps', {
+    method: 'POST',
+    body: JSON.stringify({ ...form, weekStart: currentSunday() }),
+  })
+}
+
+async function getWeekRsvpsApi(weekStart = currentSunday()) {
+  const data = await api(`/rsvps?week=${encodeURIComponent(weekStart)}`)
+  return data.rsvps || []
+}
+
+async function getPeopleApi() {
+  const data = await api('/people')
+  return data.people || []
+}
+
+async function unlockAdminApi(password) {
+  const body = await api('/admin/unlock', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  })
+  sessionStorage.setItem(ADMIN_SESSION_KEY, body.token)
+  return body
+}
+
+async function getSponsorshipsApi(token) {
+  const body = await api('/admin/unlock', {
+    method: 'POST',
+    body: JSON.stringify({ token, action: 'list' }),
+  })
+  return body.sponsorships || []
 }
 
 /* ---------- Local / demo mode ---------- */
@@ -127,7 +181,6 @@ async function submitLocal(form) {
   const person = await upsertPersonLocal(form)
   const data = loadLocal()
 
-  // One RSVP per person per week — replace if re-submitting
   const oldIds = data.rsvps
     .filter((r) => r.person_id === person.id && r.week_start === weekStart)
     .map((r) => r.id)
@@ -189,7 +242,7 @@ async function getSponsorshipsLocal() {
   )
 }
 
-/* ---------- Supabase ---------- */
+/* ---------- Supabase (optional) ---------- */
 
 async function findOrCreatePerson(form) {
   const phoneKey = normalizePhone(form.phone)
@@ -269,7 +322,6 @@ async function submitSupabase(form) {
   const weekStart = currentSunday()
   const person = await findOrCreatePerson(form)
 
-  // Replace existing RSVP for this person/week
   const { data: existing } = await supabase
     .from('rsvps')
     .select('id')
@@ -379,26 +431,26 @@ async function getSponsorshipsSupabase(token) {
 
 /* ---------- Public API ---------- */
 
-export function storageMode() {
-  return isSupabaseConfigured ? 'supabase' : 'demo'
-}
-
 export async function submitRsvp(form) {
+  if (API_URL) return submitApi(form)
   if (isSupabaseConfigured) return submitSupabase(form)
   return submitLocal(form)
 }
 
 export async function getWeekRsvps(weekStart) {
+  if (API_URL) return getWeekRsvpsApi(weekStart)
   if (isSupabaseConfigured) return getWeekRsvpsSupabase(weekStart)
   return getWeekRsvpsLocal(weekStart)
 }
 
 export async function getPeople() {
+  if (API_URL) return getPeopleApi()
   if (isSupabaseConfigured) return getPeopleSupabase()
   return getPeopleLocal()
 }
 
 export async function unlockAdmin(password) {
+  if (API_URL) return unlockAdminApi(password)
   if (isSupabaseConfigured) return unlockAdminSupabase(password)
   return unlockAdminLocal(password)
 }
@@ -414,6 +466,7 @@ export function clearAdminSession() {
 export async function getSponsorships() {
   const token = getAdminSession()
   if (!token) throw new Error('Not unlocked')
+  if (API_URL) return getSponsorshipsApi(token)
   if (isSupabaseConfigured) return getSponsorshipsSupabase(token)
   return getSponsorshipsLocal()
 }
