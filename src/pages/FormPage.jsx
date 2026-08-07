@@ -5,6 +5,7 @@ import {
   COMING_OPTIONS,
   FEEDBACK_OPTIONS,
   FOOD_LIKE_OPTIONS,
+  foodIconFor,
   GUEST_FILL_OPTIONS,
   HOST_PAYMENT,
   MEAL_STYLE_OPTIONS,
@@ -58,6 +59,9 @@ function SubmissionSummary({ form }) {
           <div className="tags">
             {form.foodLikes.map((f) => (
               <span className="tag" key={f}>
+                <span className="food-icon" aria-hidden="true">
+                  {foodIconFor(f)}
+                </span>{' '}
                 {f}
               </span>
             ))}
@@ -122,13 +126,16 @@ function MealPrefsFields({ form, setField, toggleArray }) {
         <label>What do you like to eat? Choose only what you would eat.</label>
         <div className="checkbox-grid">
           {FOOD_LIKE_OPTIONS.map((item) => (
-            <label className="choice" key={item}>
+            <label className="choice choice-food" key={item.label}>
               <input
                 type="checkbox"
-                checked={form.foodLikes.includes(item)}
-                onChange={() => toggleArray('foodLikes', item)}
+                checked={form.foodLikes.includes(item.label)}
+                onChange={() => toggleArray('foodLikes', item.label)}
               />
-              <span>{item}</span>
+              <span className="food-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
             </label>
           ))}
         </div>

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { comingLabel, getWeekRsvps } from '../lib/api'
 import {
   comingOptionLabel,
+  foodIconFor,
   mealStyleLabel,
   PUBLIC_COMING_VALUES,
 } from '../lib/formConfig'
@@ -204,10 +205,20 @@ export default function BoardPage({ defaultTab = 'coming' }) {
                         <div className="tags">
                           {likes.map((b) => (
                             <span className="tag" key={b}>
-                              Likes {b}
+                              <span className="food-icon" aria-hidden="true">
+                                {foodIconFor(b)}
+                              </span>{' '}
+                              {b}
                             </span>
                           ))}
-                          {other && <span className="tag">Likes {other}</span>}
+                          {other && (
+                            <span className="tag">
+                              <span className="food-icon" aria-hidden="true">
+                                ✨
+                              </span>{' '}
+                              {other}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
