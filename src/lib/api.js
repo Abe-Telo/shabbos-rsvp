@@ -1,6 +1,8 @@
-import { ATTENDING_VALUES, mealStyleLabel } from './formConfig'
+import { ATTENDING_VALUES, emptyForm, mealStyleLabel } from './formConfig'
 import { adminUnlockUrl, isSupabaseConfigured, supabase } from './supabase'
 import { currentSunday } from './week'
+import { loadLastSubmissionThisWeek, saveLastSubmission } from './localProfile'
+
 
 const LS_KEY = 'shabbos-rsvp-data-v1'
 const ADMIN_SESSION_KEY = 'shabbos-admin-session'
@@ -453,9 +455,106 @@ async function getSponsorshipsSupabase(token) {
 /* ---------- Public API ---------- */
 
 export async function submitRsvp(form) {
-  if (API_URL) return submitApi(form)
-  if (isSupabaseConfigured) return submitSupabase(form)
-  return submitLocal(form)
+  let result
+  if (API_URL) result = await submitApi(form)
+  else if (isSupabaseConfigured) result = await submitSupabase(form)
+  else result = await submitLocal(form)
+  saveLastSubmission(form)
+  return result
+}
+
+/** Map a saved RSVP (+ optional sponsorship) back into form fields. */
+export function rsvpToForm(rsvp, sponsorship = null) {
+  const form = emptyForm()
+  if (!rsvp) return form
+  form.fullName = rsvp.full_name || ''
+  form.phone = rsvp.phone || ''
+  form.coming = rsvp.coming || ''
+  form.mealStyle = rsvp.meal_style || rsvp.potluck || ''
+  form.mealStyleOther = rsvp.meal_style_other || ''
+  form.foodLikes = rsvp.food_likes || rsvp.bringing || []
+  form.foodLikesOther = rsvp.food_likes_other || rsvp.bringing_other || ''
+  form.bringingDish = rsvp.bringing_dish || ''
+  form.heardAbout = rsvp.heard_about || ''
+  form.invitedBy = rsvp.invited_by || ''
+  form.bringingMoreGuests = rsvp.bringing_more_guests || ''
+  form.guestNames = rsvp.guest_names || ''
+  form.guestCount =
+    rsvp.guest_count === null || rsvp.guest_count === undefined
+      ? ''
+      : String(rsvp.guest_count)
+  form.guestOvernight = rsvp.guest_overnight || ''
+  form.guestWillFillForm = rsvp.guest_will_fill_form || ''
+  form.knowByWhen = rsvp.know_by_when || ''
+  form.socialArrivalTime = rsvp.social_arrival_time || ''
+  form.socialNotes = rsvp.social_notes || ''
+  form.feedback = rsvp.feedback || ''
+  form.feedbackNotes = rsvp.feedback_notes || ''
+  if (sponsorship) {
+    form.sponsorship = sponsorship.contributions || []
+    form.sponsorshipNotes = sponsorship.notes || ''
+    form.potluckContribution = sponsorship.potluck_contribution || ''
+    if (!form.bringingDish && sponsorship.potluck_contribution) {
+      form.bringingDish = sponsorship.potluck_contribution
+    }
+  }
+  return form
+}
+
+export async function findMyRsvpThisWeek({ fullName, phone } = {}) {
+  const week = currentSunday()
+  if (API_URL) {
+    const params = new URLSearchParams({ week })
+    if (phone) params.set('phone', phone)
+    if (fullName) params.set('name', fullName)
+    const data = await api(`/rsvps/mine?${params}`)
+    if (!data.rsvp) return null
+    return {
+      form: rsvpToForm(data.rsvp, data.sponsorship),
+      rsvp: data.rsvp,
+      sponsorship: data.sponsorship,
+      week_start: week,
+    }
+  }
+
+  // Demo / local: match from localStorage store or last submission
+  const last = loadLastSubmissionThisWeek()
+  if (last?.form) {
+    const phoneKey = normalizePhone(phone || last.form.phone)
+    const name = (fullName || last.form.fullName || '').trim().toLowerCase()
+    const samePhone =
+      phoneKey && normalizePhone(last.form.phone) === phoneKey
+    const sameName =
+      name && last.form.fullName.trim().toLowerCase() === name
+    if (samePhone || sameName || (!phone && !fullName)) {
+      return {
+        form: { ...emptyForm(), ...last.form },
+        rsvp: null,
+        sponsorship: null,
+        week_start: week,
+      }
+    }
+  }
+
+  const data = loadLocal()
+  const phoneKey = normalizePhone(phone)
+  const name = (fullName || '').trim().toLowerCase()
+  const rsvp = data.rsvps
+    .filter((r) => r.week_start === week)
+    .find(
+      (r) =>
+        (phoneKey && normalizePhone(r.phone) === phoneKey) ||
+        (name && r.full_name.toLowerCase() === name),
+    )
+  if (!rsvp) return null
+  const sponsorship =
+    data.sponsorships.find((s) => s.rsvp_id === rsvp.id) || null
+  return {
+    form: rsvpToForm(rsvp, sponsorship),
+    rsvp,
+    sponsorship,
+    week_start: week,
+  }
 }
 
 export async function getWeekRsvps(weekStart) {

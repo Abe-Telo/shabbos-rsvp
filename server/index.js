@@ -133,6 +133,32 @@ app.get('/rsvps', (req, res) => {
   res.json({ week_start: week, rsvps: rows })
 })
 
+/** Lookup own submission for this week (requires phone match). */
+app.get('/rsvps/mine', (req, res) => {
+  const phoneKey = digits(req.query.phone)
+  const name = String(req.query.name || '')
+    .trim()
+    .toLowerCase()
+  const week = req.query.week || currentSunday()
+  if (!phoneKey && !name) {
+    return res.status(400).json({ error: 'phone or name required' })
+  }
+  const db = loadDb()
+  const matches = db.rsvps.filter((r) => {
+    if (r.week_start !== week) return false
+    if (phoneKey && digits(r.phone) === phoneKey) return true
+    if (name && String(r.full_name || '').toLowerCase() === name) return true
+    return false
+  })
+  const rsvp = matches.sort((a, b) =>
+    a.created_at < b.created_at ? 1 : -1,
+  )[0]
+  if (!rsvp) return res.json({ rsvp: null, sponsorship: null })
+  const sponsorship =
+    db.sponsorships.find((s) => s.rsvp_id === rsvp.id) || null
+  res.json({ rsvp, sponsorship })
+})
+
 app.get('/people', (_req, res) => {
   const db = loadDb()
   const people = [...db.people]

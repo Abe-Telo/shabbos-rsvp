@@ -1,6 +1,8 @@
 import { emptyForm } from './formConfig'
+import { currentSunday } from './week'
 
 const PROFILE_KEY = 'shabbos-rsvp-profile-v1'
+const LAST_SUBMISSION_KEY = 'shabbos-rsvp-last-submission-v1'
 
 /** Fields remembered across weeks so guests can click through quickly. */
 const REMEMBERED = [
@@ -49,4 +51,31 @@ export function saveRememberedForm(form) {
 /** Keep profile, clear this-week answers (coming, sponsorship, feedback). */
 export function formForNewWeek() {
   return loadRememberedForm()
+}
+
+export function saveLastSubmission(form) {
+  try {
+    localStorage.setItem(
+      LAST_SUBMISSION_KEY,
+      JSON.stringify({
+        week_start: currentSunday(),
+        form: { ...form },
+        saved_at: new Date().toISOString(),
+      }),
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadLastSubmissionThisWeek() {
+  try {
+    const raw = localStorage.getItem(LAST_SUBMISSION_KEY)
+    if (!raw) return null
+    const saved = JSON.parse(raw)
+    if (saved.week_start !== currentSunday()) return null
+    return saved
+  } catch {
+    return null
+  }
 }

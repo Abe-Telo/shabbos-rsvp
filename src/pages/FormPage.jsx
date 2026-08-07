@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { submitRsvp } from '../lib/api'
+import { comingLabel, findMyRsvpThisWeek, submitRsvp } from '../lib/api'
 import {
   COMING_OPTIONS,
   FEEDBACK_OPTIONS,
@@ -9,6 +9,7 @@ import {
   HOST_PAYMENT,
   MEAL_STYLE_OPTIONS,
   SPONSORSHIP_OPTIONS,
+  mealStyleLabel,
 } from '../lib/formConfig'
 import {
   formForNewWeek,
@@ -17,6 +18,9 @@ import {
 } from '../lib/localProfile'
 
 const STEPS = {
+  checking: 'checking',
+  returning: 'returning',
+  all_set: 'all_set',
   basics: 'basics',
   prefs: 'prefs',
   guests: 'guests',
@@ -33,6 +37,52 @@ const STEPS = {
 
 function nextFromComing(coming) {
   return COMING_OPTIONS.find((o) => o.value === coming)?.next || 'prefs'
+}
+
+function SubmissionSummary({ form }) {
+  return (
+    <div className="list" style={{ marginTop: '0.75rem' }}>
+      <div className="rsvp-row">
+        <strong>{form.fullName || '—'}</strong>
+        <div className="meta">
+          {comingLabel(form.coming)}
+          {form.phone ? ` · ${form.phone}` : ''}
+        </div>
+        {form.mealStyle && (
+          <div className="meta">Meal: {mealStyleLabel(form.mealStyle)}</div>
+        )}
+        {form.bringingDish && (
+          <div className="meta">Bringing: {form.bringingDish}</div>
+        )}
+        {form.foodLikes?.length > 0 && (
+          <div className="tags">
+            {form.foodLikes.map((f) => (
+              <span className="tag" key={f}>
+                {f}
+              </span>
+            ))}
+          </div>
+        )}
+        {form.guestNames && (
+          <div className="meta">Guests: {form.guestNames}</div>
+        )}
+        {form.guestCount && (
+          <div className="meta">Guest count: {form.guestCount}</div>
+        )}
+        {form.knowByWhen && (
+          <div className="meta">Will know by: {form.knowByWhen}</div>
+        )}
+        {form.socialArrivalTime && (
+          <div className="meta">Arrival: {form.socialArrivalTime}</div>
+        )}
+        {form.sponsorship?.length > 0 && (
+          <div className="meta">
+            Sponsorship noted (private): {form.sponsorship.join(', ')}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function MealPrefsFields({ form, setField, toggleArray }) {
@@ -141,21 +191,49 @@ function PaymentInfo() {
 }
 
 export default function FormPage() {
-  const [form, setForm] = useState(loadRememberedForm)
-  const [step, setStep] = useState(STEPS.basics)
+  const rememberedSeed = loadRememberedForm()
+  const [form, setForm] = useState(rememberedSeed)
+  const [step, setStep] = useState(STEPS.checking)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [existing, setExisting] = useState(null)
   const remembered =
     Boolean(form.fullName?.trim()) || Boolean(form.phone?.trim())
 
-  const comingOpt = useMemo(
-    () => COMING_OPTIONS.find((o) => o.value === form.coming),
-    [form.coming],
-  )
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const seed = loadRememberedForm()
+      if (!seed.fullName?.trim() && !seed.phone?.trim()) {
+        if (!cancelled) setStep(STEPS.basics)
+        return
+      }
+      try {
+        const mine = await findMyRsvpThisWeek({
+          fullName: seed.fullName,
+          phone: seed.phone,
+        })
+        if (cancelled) return
+        if (mine?.form) {
+          setExisting(mine)
+          setForm(mine.form)
+          setStep(STEPS.returning)
+        } else {
+          setStep(STEPS.basics)
+        }
+      } catch {
+        if (!cancelled) setStep(STEPS.basics)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
+    if (step === STEPS.checking) return
     saveRememberedForm(form)
-  }, [form])
+  }, [form, step])
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -173,12 +251,18 @@ export default function FormPage() {
     })
   }
 
+  function startEdit() {
+    setForm(existing?.form || form)
+    setStep(STEPS.basics)
+  }
+
   async function finish() {
     setSaving(true)
     setError('')
     try {
       saveRememberedForm(form)
       await submitRsvp(form)
+      setExisting({ form: { ...form }, week_start: existing?.week_start })
       setStep(STEPS.done)
     } catch (e) {
       setError(e.message || 'Could not save. Try again.')
@@ -237,8 +321,52 @@ export default function FormPage() {
             <Link className="btn btn-primary" to="/board">
               View this week
             </Link>
-            <button type="button" className="btn btn-ghost" onClick={resetForm}>
-              Submit another
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setExisting({ form: { ...form } })
+                setStep(STEPS.returning)
+              }}
+            >
+              Need to change something?
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  if (step === STEPS.checking) {
+    return (
+      <>
+        <section className="hero">
+          <h1>Shabbos RSVP</h1>
+          <p>Checking for your RSVP this week…</p>
+        </section>
+        <div className="panel">
+          <p className="meta">One moment…</p>
+        </div>
+      </>
+    )
+  }
+
+  if (step === STEPS.all_set) {
+    return (
+      <>
+        <section className="hero">
+          <h1>You&apos;re all set</h1>
+          <p>No changes needed — see you for Shabbos.</p>
+        </section>
+        <div className="panel">
+          <div className="banner banner-ok">Your RSVP for this week is on file.</div>
+          {existing?.form && <SubmissionSummary form={existing.form} />}
+          <div className="actions">
+            <Link className="btn btn-primary" to="/board">
+              View this week
+            </Link>
+            <button type="button" className="btn btn-ghost" onClick={startEdit}>
+              Actually, I need to change something
             </button>
           </div>
         </div>
@@ -258,12 +386,37 @@ export default function FormPage() {
 
       {error && <div className="banner banner-err">{error}</div>}
 
+      {step === STEPS.returning && (
+        <div className="panel">
+          <h2>Welcome back</h2>
+          <p className="hint">
+            We already have your RSVP for this week. Do you need to make a change
+            to your submission?
+          </p>
+          {existing?.form && <SubmissionSummary form={existing.form} />}
+          <div className="actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setStep(STEPS.all_set)}
+            >
+              No, I&apos;m all set
+            </button>
+            <button type="button" className="btn btn-accent" onClick={startEdit}>
+              Yes, I need to change it
+            </button>
+          </div>
+        </div>
+      )}
+
       {step === STEPS.basics && (
         <div className="panel">
           <h2>Weekly Shabbos RSVP & coordination</h2>
           <p className="hint">
-            Required fields marked with *
-            {remembered
+            {existing
+              ? 'Edit anything below, then continue through the form and submit again.'
+              : 'Required fields marked with *'}
+            {!existing && remembered
               ? ' Your name and phone are remembered on this device for next week.'
               : ''}
           </p>
