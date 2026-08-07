@@ -234,14 +234,7 @@ function upsertPerson(db, form) {
     person.phone_digits = phoneKey || null
     person.last_seen = now
     if (prefs) {
-      const parts = String(person.food_prefs || '')
-        .split(' | ')
-        .map((p) => p.trim())
-        .filter(Boolean)
-      if (!parts.includes(prefs)) {
-        parts.push(prefs)
-        person.food_prefs = parts.join(' | ')
-      }
+      person.food_prefs = mergeFoodPrefs(person.food_prefs, prefs)
     }
     if (attending && !already) {
       person.times_attended = (person.times_attended || 0) + 1
