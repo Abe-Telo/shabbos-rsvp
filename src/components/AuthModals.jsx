@@ -157,7 +157,6 @@ export function AuthModal() {
               required
               minLength={3}
               maxLength={64}
-              placeholder="abe or abe@email.com"
             />
           </div>
           <div className="field">
