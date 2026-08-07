@@ -487,6 +487,7 @@ app.get('/rsvps/mine', (req, res) => {
     return res.status(400).json({ error: 'phone or name required' })
   }
   const db = loadDb()
+  const peopleById = Object.fromEntries((db.people || []).map((p) => [p.id, p]))
   const matches = db.rsvps.filter((r) => {
     if (wantPrior) {
       if (String(r.week_start || '') >= String(week)) return false
@@ -494,7 +495,9 @@ app.get('/rsvps/mine', (req, res) => {
       return false
     }
     if (phoneKey && digits(r.phone) === phoneKey) return true
-    if (name && String(r.full_name || '').toLowerCase() === name) return true
+    const personName = peopleById[r.person_id]?.name || ''
+    const rsvpName = String(r.full_name || personName || '').toLowerCase()
+    if (name && rsvpName === name) return true
     return false
   })
   const rsvp = matches.sort((a, b) => {
@@ -850,9 +853,12 @@ app.patch('/rsvps/:id/food', (req, res) => {
     const name = String(body.fullName || body.full_name || '')
       .trim()
       .toLowerCase()
+    const person = db.people.find((p) => p.id === rsvp.person_id)
+    const rsvpName = String(rsvp.full_name || person?.name || '')
+      .trim()
+      .toLowerCase()
     const matchesPhone = phoneKey && digits(rsvp.phone) === phoneKey
-    const matchesName =
-      name && String(rsvp.full_name || '').trim().toLowerCase() === name
+    const matchesName = name && rsvpName === name
     const adminOk = validSession(db, bearerToken(req))
     if (!adminOk && !matchesPhone && !matchesName) {
       return res.status(403).json({ error: 'Name or phone must match this RSVP' })

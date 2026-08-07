@@ -676,6 +676,9 @@ export default function FormPage() {
             <Link className="btn btn-primary" to="/board">
               View this week
             </Link>
+            <Link className="btn btn-accent" to="/food#my-food">
+              Add food photos &amp; comment
+            </Link>
             <button type="button" className="btn btn-ghost" onClick={startEdit}>
               Actually, I need to change something
             </button>
@@ -713,7 +716,10 @@ export default function FormPage() {
             >
               No, I&apos;m all set
             </button>
-            <button type="button" className="btn btn-accent" onClick={startEdit}>
+            <Link className="btn btn-accent" to="/food#my-food">
+              Just add food photos
+            </Link>
+            <button type="button" className="btn btn-ghost" onClick={startEdit}>
               Yes, I need to change it
             </button>
           </div>

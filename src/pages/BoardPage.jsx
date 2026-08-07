@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import PastPeopleList from '../components/PastPeopleList'
 import PersonAvatar from '../components/PersonAvatar'
 import { comingLabel, getWeekRsvps } from '../lib/api'
+import MyFoodUpdate from '../components/MyFoodUpdate'
 import {
   comingOptionLabel,
   foodIconFor,
@@ -277,6 +278,16 @@ export default function BoardPage({ defaultTab = 'coming' }) {
             From people who RSVP&apos;d publicly this week. Photos and comments
             welcome. Resets each Sunday.
           </p>
+          <MyFoodUpdate
+            onSaved={async () => {
+              try {
+                const rows = await getWeekRsvps(week)
+                setRsvps(rows)
+              } catch {
+                /* ignore refresh errors */
+              }
+            }}
+          />
           {loading && <p className="meta">Loading…</p>}
           {!loading && stats.dishes.length === 0 && (
             <div className="empty">
