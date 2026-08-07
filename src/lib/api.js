@@ -1,4 +1,9 @@
-import { ATTENDING_VALUES, emptyForm, mealStyleLabel } from './formConfig'
+import {
+  ATTENDING_VALUES,
+  comingOptionLabel,
+  emptyForm,
+  mealStyleLabel,
+} from './formConfig'
 import { adminUnlockUrl, isSupabaseConfigured, supabase } from './supabase'
 import { currentSunday } from './week'
 import { loadLastSubmissionThisWeek, saveLastSubmission } from './localProfile'
@@ -599,15 +604,5 @@ export async function getSponsorships() {
 }
 
 export function comingLabel(value) {
-  const map = {
-    yes: 'Coming',
-    yes_guest: 'Coming + guest',
-    yes_new: 'Newcomer',
-    probably: 'Probably yes',
-    social: 'Social / hang out',
-    unsure: 'Not sure yet',
-    no: "Can't make it",
-    help: 'Helping / sponsoring',
-  }
-  return map[value] || value
+  return comingOptionLabel(value) || value
 }

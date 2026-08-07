@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { comingLabel, getWeekRsvps } from '../lib/api'
-import { mealStyleLabel } from '../lib/formConfig'
+import {
+  comingOptionLabel,
+  mealStyleLabel,
+  PUBLIC_COMING_VALUES,
+} from '../lib/formConfig'
 import { currentSunday, formatWeekLabel } from '../lib/week'
 
 export default function BoardPage({ defaultTab = 'coming' }) {
@@ -41,27 +45,33 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     }
   }, [week])
 
+  const publicRsvps = useMemo(
+    () => rsvps.filter((r) => PUBLIC_COMING_VALUES.includes(r.coming)),
+    [rsvps],
+  )
+
+  const grouped = useMemo(() => {
+    return PUBLIC_COMING_VALUES.map((value) => ({
+      value,
+      label: comingOptionLabel(value),
+      rows: publicRsvps.filter((r) => r.coming === value),
+    })).filter((g) => g.rows.length > 0)
+  }, [publicRsvps])
+
   const stats = useMemo(() => {
-    const coming = rsvps.filter((r) =>
-      [
-        'yes',
-        'yes_guest',
-        'yes_new',
-        'probably',
-        'social',
-        'unsure',
-        'help',
-      ].includes(r.coming),
+    const guests = publicRsvps.reduce(
+      (n, r) => n + (Number(r.guest_count) || 0),
+      0,
     )
-    const guests = rsvps.reduce((n, r) => n + (Number(r.guest_count) || 0), 0)
-    const dishes = rsvps
+    const dishes = publicRsvps
       .map((r) => ({
         name: r.full_name,
         dish: (r.bringing_dish || r.potluck_contribution || '').trim(),
+        coming: comingLabel(r.coming),
       }))
       .filter((r) => r.dish)
-    return { coming: coming.length, guests, dishes }
-  }, [rsvps])
+    return { coming: publicRsvps.length, guests, dishes }
+  }, [publicRsvps])
 
   return (
     <>
@@ -70,7 +80,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         <p>
           {tab === 'food'
             ? `Dishes people are bringing for ${formatWeekLabel(week)}.`
-            : `Public RSVPs for ${formatWeekLabel(week)}. Phones and sponsorship stay private.`}
+            : `Public RSVPs for ${formatWeekLabel(week)} — who selected each coming answer. Phones and sponsorship stay private.`}
         </p>
       </section>
 
@@ -79,7 +89,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
       <div className="stats">
         <div className="stat">
           <span className="n">{stats.coming}</span>
-          <span className="l">Likely coming</span>
+          <span className="l">Public RSVPs</span>
         </div>
         <div className="stat">
           <span className="n">{stats.guests}</span>
@@ -112,8 +122,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         <div className="panel">
           <h2>Food people are bringing</h2>
           <p className="hint">
-            Whatever guests typed (e.g. Flo rice). Resets each Sunday with the
-            week.
+            From people who RSVP&apos;d publicly this week. Resets each Sunday.
           </p>
           {loading && <p className="meta">Loading…</p>}
           {!loading && stats.dishes.length === 0 && (
@@ -126,7 +135,10 @@ export default function BoardPage({ defaultTab = 'coming' }) {
             {stats.dishes.map((d, i) => (
               <div className="rsvp-row" key={`${d.name}-${d.dish}-${i}`}>
                 <strong>{d.dish}</strong>
-                <div className="meta">Brought by {d.name}</div>
+                <div className="meta">
+                  Brought by {d.name}
+                  {d.coming ? ` · ${d.coming}` : ''}
+                </div>
               </div>
             ))}
           </div>
@@ -136,55 +148,74 @@ export default function BoardPage({ defaultTab = 'coming' }) {
       {tab === 'coming' && (
         <div className="panel">
           <h2>Who&apos;s coming</h2>
-          <p className="hint">Names and meal preferences only — no phone numbers.</p>
+          <p className="hint">
+            Grouped by what they selected for “Are you coming this week?” —
+            public answers only.
+          </p>
           {loading && <p className="meta">Loading…</p>}
-          {!loading && rsvps.length === 0 && (
-            <div className="empty">No RSVPs yet this week. Be the first!</div>
+          {!loading && publicRsvps.length === 0 && (
+            <div className="empty">No public RSVPs yet this week.</div>
           )}
-          <div className="list">
-            {rsvps.map((r) => {
-              const likes = r.food_likes || r.bringing || []
-              const other = r.food_likes_other || r.bringing_other
-              const style = r.meal_style || r.potluck
-              const dish = (r.bringing_dish || '').trim()
-              return (
-                <div className="rsvp-row" key={r.id}>
-                  <strong>{r.full_name}</strong>
-                  <div className="meta">
-                    {comingLabel(r.coming)}
-                    {r.guest_count
-                      ? ` · ${r.guest_count} guest${
-                          r.guest_count == 1 ? '' : 's'
-                        }`
-                      : ''}
-                  </div>
-                  {style && (
-                    <div className="meta">
-                      Prefers: {mealStyleLabel(style) || style}
+
+          {grouped.map((group) => (
+            <div key={group.value} style={{ marginTop: '1.25rem' }}>
+              <h3
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '1.05rem',
+                  margin: '0 0 0.55rem',
+                }}
+              >
+                {group.label}
+                <span className="tag" style={{ marginLeft: '0.5rem' }}>
+                  {group.rows.length}
+                </span>
+              </h3>
+              <div className="list">
+                {group.rows.map((r) => {
+                  const likes = r.food_likes || r.bringing || []
+                  const other = r.food_likes_other || r.bringing_other
+                  const style = r.meal_style || r.potluck
+                  const dish = (r.bringing_dish || '').trim()
+                  return (
+                    <div className="rsvp-row" key={r.id}>
+                      <strong>{r.full_name}</strong>
+                      <div className="tags">
+                        <span className="tag tag-warn">{comingLabel(r.coming)}</span>
+                        {r.guest_count ? (
+                          <span className="tag">
+                            {r.guest_count} guest
+                            {r.guest_count == 1 ? '' : 's'}
+                          </span>
+                        ) : null}
+                      </div>
+                      {style && (
+                        <div className="meta">
+                          Prefers: {mealStyleLabel(style) || style}
+                        </div>
+                      )}
+                      {dish && (
+                        <div className="meta">Bringing: {dish}</div>
+                      )}
+                      {r.guest_names && (
+                        <div className="meta">Guests: {r.guest_names}</div>
+                      )}
+                      {(likes.length > 0 || other) && (
+                        <div className="tags">
+                          {likes.map((b) => (
+                            <span className="tag" key={b}>
+                              Likes {b}
+                            </span>
+                          ))}
+                          {other && <span className="tag">Likes {other}</span>}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {dish && (
-                    <div className="tags">
-                      <span className="tag tag-warn">Bringing: {dish}</span>
-                    </div>
-                  )}
-                  {r.guest_names && (
-                    <div className="meta">Guests: {r.guest_names}</div>
-                  )}
-                  {(likes.length > 0 || other) && (
-                    <div className="tags">
-                      {likes.map((b) => (
-                        <span className="tag" key={b}>
-                          Likes {b}
-                        </span>
-                      ))}
-                      {other && <span className="tag">Likes {other}</span>}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </>

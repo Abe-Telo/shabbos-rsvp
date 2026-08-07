@@ -35,6 +35,20 @@ export const COMING_OPTIONS = [
   },
 ]
 
+/** Shown on the public This Week board. */
+export const PUBLIC_COMING_VALUES = [
+  'yes',
+  'yes_guest',
+  'yes_new',
+  'probably',
+  'social',
+  'unsure',
+]
+
+export function comingOptionLabel(value) {
+  return COMING_OPTIONS.find((o) => o.value === value)?.label || value || ''
+}
+
 export const MEAL_STYLE_OPTIONS = [
   {
     value: 'host_cook',
