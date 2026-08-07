@@ -555,8 +555,13 @@ select {
 
 .food-card-meta {
   min-width: 0;
+  flex: 1;
   display: grid;
   gap: 0.2rem;
+}
+
+.food-card-head .food-add-btn {
+  margin-left: auto;
 }
 
 .food-card-dish {
@@ -613,7 +618,38 @@ select {
   background: rgba(243, 235, 224, 0.85);
   border: 1px solid rgba(26, 36, 28, 0.08);
   line-height: 1.45;
+}
+
+.food-chat-bubble p {
+  margin: 0;
   white-space: pre-wrap;
+}
+
+.food-chat-reply {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 14px 14px 4px 14px;
+}
+
+.food-chat-author {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.food-composer-attach-disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.food-add-tile {
+  width: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  border-radius: 12px;
+  border-style: dashed;
+  font-size: 2rem;
 }
 
 .food-composer {

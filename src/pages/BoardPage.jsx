@@ -4,6 +4,7 @@ import FoodSectionCard from '../components/FoodSectionCard'
 import PastPeopleList from '../components/PastPeopleList'
 import PersonAvatar from '../components/PersonAvatar'
 import { comingLabel, findMyRsvpThisWeek, getWeekRsvps } from '../lib/api'
+import { useAuth } from '../lib/AuthContext'
 import {
   comingOptionLabel,
   foodIconFor,
@@ -13,6 +14,26 @@ import {
 } from '../lib/formConfig'
 import { loadRememberedForm } from '../lib/localProfile'
 import { currentSunday, formatWeekLabel } from '../lib/week'
+
+const FOOD_IDENTITY_KEY = 'shabbos-food-identity-v1'
+
+function loadFoodIdentity() {
+  try {
+    const raw = sessionStorage.getItem(FOOD_IDENTITY_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+function saveFoodIdentity(identity) {
+  try {
+    sessionStorage.setItem(FOOD_IDENTITY_KEY, JSON.stringify(identity))
+  } catch {
+    /* ignore */
+  }
+}
 
 function tabFromPath(pathname, defaultTab) {
   if (defaultTab === 'food' || pathname.endsWith('/food')) return 'food'
@@ -24,6 +45,7 @@ function tabFromPath(pathname, defaultTab) {
 export default function BoardPage({ defaultTab = 'coming' }) {
   const location = useLocation()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const week = currentSunday()
   const [rsvps, setRsvps] = useState([])
   const [loading, setLoading] = useState(true)
@@ -32,13 +54,24 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     tabFromPath(location.pathname, defaultTab),
   )
   const [myIdentity, setMyIdentity] = useState(() => {
+    const saved = loadFoodIdentity()
     const r = loadRememberedForm()
     return {
-      fullName: r.fullName || '',
-      phone: r.phone || '',
-      rsvpId: null,
+      fullName: saved?.fullName || r.fullName || '',
+      phone: saved?.phone || r.phone || '',
+      rsvpId: saved?.rsvpId || null,
     }
   })
+
+  // Prefer signed-in profile when available
+  useEffect(() => {
+    if (!user) return
+    setMyIdentity((prev) => ({
+      ...prev,
+      fullName: user.full_name || prev.fullName || '',
+      phone: user.phone || prev.phone || '',
+    }))
+  }, [user])
 
   useEffect(() => {
     setTab(tabFromPath(location.pathname, defaultTab))
@@ -67,25 +100,33 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     }
   }, [week])
 
-  // Auto-unlock your food section when remembered name/phone matches an RSVP
+  // Auto-unlock your food section from login / remembered RSVP
   useEffect(() => {
     if (tab !== 'food') return
-    const name = myIdentity.fullName?.trim()
-    const phone = myIdentity.phone?.trim()
+    const name = (user?.full_name || myIdentity.fullName || '').trim()
+    const phone = (user?.phone || myIdentity.phone || '').trim()
     if (!name && !phone) return
     let cancelled = false
     ;(async () => {
       try {
         const mine = await findMyRsvpThisWeek({ fullName: name, phone })
         if (cancelled || !mine?.rsvp) return
+        const next = {
+          fullName: name || mine.rsvp.full_name || '',
+          phone: phone || mine.rsvp.phone || '',
+          rsvpId: mine.rsvp.id,
+        }
         setMyIdentity((prev) => {
-          if (prev.rsvpId === mine.rsvp.id) return prev
-          return {
-            fullName: name || mine.rsvp.full_name || prev.fullName,
-            phone: phone || mine.rsvp.phone || prev.phone,
-            rsvpId: mine.rsvp.id,
+          if (
+            prev.rsvpId === next.rsvpId &&
+            prev.fullName === next.fullName &&
+            prev.phone === next.phone
+          ) {
+            return prev
           }
+          return next
         })
+        saveFoodIdentity(next)
       } catch {
         /* ignore */
       }
@@ -93,7 +134,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     return () => {
       cancelled = true
     }
-  }, [tab, myIdentity.fullName, myIdentity.phone])
+  }, [tab, user?.full_name, user?.phone, myIdentity.fullName, myIdentity.phone])
 
   function selectTab(next) {
     setTab(next)
@@ -103,21 +144,26 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     else navigate('/board')
   }
 
-  async function claimFoodSection({ fullName, phone, rsvpId }) {
+  async function claimFoodSection({ fullName, phone }) {
     const mine = await findMyRsvpThisWeek({ fullName, phone })
     if (!mine?.rsvp) {
       throw new Error('No RSVP found for that name/phone this week')
     }
-    if (rsvpId && mine.rsvp.id !== rsvpId) {
-      throw new Error(
-        'That name/phone belongs to a different RSVP — open your own section',
-      )
-    }
-    setMyIdentity({
+    const next = {
       fullName: fullName.trim(),
       phone: phone.trim(),
       rsvpId: mine.rsvp.id,
+    }
+    setMyIdentity(next)
+    saveFoodIdentity(next)
+    // Scroll to your own section if you're on another card
+    requestAnimationFrame(() => {
+      document.getElementById('my-food-section')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
     })
+    return next
   }
   const publicRsvps = useMemo(
     () => rsvps.filter((r) => PUBLIC_COMING_VALUES.includes(r.coming)),
@@ -147,6 +193,8 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         profile_username: r.profile_username,
         food_photos: Array.isArray(r.food_photos) ? r.food_photos : [],
         food_comment: (r.food_comment || '').trim(),
+        food_thread: Array.isArray(r.food_thread) ? r.food_thread : [],
+        food_replies: Array.isArray(r.food_replies) ? r.food_replies : [],
       }))
       .sort((a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), undefined, {
@@ -338,9 +386,9 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         <div className="panel">
           <h2>Food people are bringing</h2>
           <p className="hint">
-            After you RSVP, open your section below — tap + for photos, or type
-            in the chat box and Send. Confirm with your RSVP name and phone the
-            first time.
+            After you RSVP, use <strong>+</strong> on your section for photos.
+            Comment under your name, or reply on someone else&apos;s section once
+            they&apos;ve posted. Signed-in guests are unlocked automatically.
           </p>
           {loading && <p className="meta">Loading…</p>}
           {!loading && stats.dishes.length === 0 && (
@@ -355,6 +403,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
                 key={d.id}
                 dish={d}
                 isMine={myIdentity.rsvpId === d.id}
+                known={Boolean(myIdentity.rsvpId)}
                 identity={myIdentity}
                 onClaim={claimFoodSection}
                 onSaved={async () => {

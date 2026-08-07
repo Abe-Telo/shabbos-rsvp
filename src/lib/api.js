@@ -743,19 +743,32 @@ export async function updateRsvpFood(id, patch) {
   const data = loadLocal()
   const rsvp = data.rsvps.find((r) => r.id === id)
   if (!rsvp) throw new Error('RSVP not found')
-  if (patch.bringing_dish !== undefined || patch.bringingDish !== undefined) {
-    rsvp.bringing_dish = patch.bringing_dish ?? patch.bringingDish
-  }
-  if (patch.food_comment !== undefined || patch.foodComment !== undefined) {
-    rsvp.food_comment = patch.food_comment ?? patch.foodComment
-  }
-  if (patch.food_photos !== undefined || patch.foodPhotos !== undefined) {
-    rsvp.food_photos = patch.food_photos ?? patch.foodPhotos
-  } else if (patch.add_photos || patch.addPhotos) {
-    rsvp.food_photos = [
-      ...(rsvp.food_photos || []),
-      ...(patch.add_photos || patch.addPhotos || []),
-    ].slice(0, 8)
+  if (patch.reply || patch.add_reply) {
+    const text = String(patch.reply || patch.add_reply || '').trim()
+    rsvp.food_replies = [
+      ...(rsvp.food_replies || []),
+      {
+        id: uid(),
+        author_name: patch.fullName || patch.full_name || 'Guest',
+        text,
+        created_at: new Date().toISOString(),
+      },
+    ]
+  } else {
+    if (patch.bringing_dish !== undefined || patch.bringingDish !== undefined) {
+      rsvp.bringing_dish = patch.bringing_dish ?? patch.bringingDish
+    }
+    if (patch.food_comment !== undefined || patch.foodComment !== undefined) {
+      rsvp.food_comment = patch.food_comment ?? patch.foodComment
+    }
+    if (patch.food_photos !== undefined || patch.foodPhotos !== undefined) {
+      rsvp.food_photos = patch.food_photos ?? patch.foodPhotos
+    } else if (patch.add_photos || patch.addPhotos) {
+      rsvp.food_photos = [
+        ...(rsvp.food_photos || []),
+        ...(patch.add_photos || patch.addPhotos || []),
+      ].slice(0, 8)
+    }
   }
   saveLocal(data)
   return { rsvp }

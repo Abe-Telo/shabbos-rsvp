@@ -66,3 +66,40 @@ export function normalizeFoodComment(value) {
   const s = String(value || '').trim()
   return s ? s.slice(0, 1000) : null
 }
+
+export function normalizeFoodReplies(list) {
+  if (!Array.isArray(list)) return []
+  return list
+    .filter((r) => r && String(r.text || '').trim())
+    .map((r) => ({
+      id: r.id || null,
+      author_name: String(r.author_name || r.authorName || 'Guest').trim().slice(0, 80),
+      text: String(r.text || '').trim().slice(0, 1000),
+      created_at: r.created_at || null,
+    }))
+}
+
+/** Public thread: legacy owner comment + replies. */
+export function foodThreadFor(rsvp) {
+  const out = []
+  const legacy = String(rsvp?.food_comment || '').trim()
+  if (legacy) {
+    for (const chunk of legacy.split(/\n\n+/).filter(Boolean)) {
+      out.push({
+        id: `legacy-${out.length}`,
+        author_name: rsvp.full_name || 'Host guest',
+        text: chunk,
+        kind: 'owner',
+        created_at: rsvp.created_at || null,
+      })
+    }
+  }
+  for (const r of normalizeFoodReplies(rsvp?.food_replies)) {
+    out.push({
+      ...r,
+      id: r.id || `reply-${out.length}`,
+      kind: 'reply',
+    })
+  }
+  return out
+}

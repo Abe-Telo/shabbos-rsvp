@@ -13,7 +13,9 @@ import {
 } from './auth.js'
 import { foodPhotosDir, loadDb, saveDb } from './db.js'
 import {
+  foodThreadFor,
   normalizeFoodComment,
+  normalizeFoodReplies,
   persistFoodPhotos,
 } from './foodPhotos.js'
 
@@ -104,6 +106,8 @@ function mapRsvpPublic(row, db) {
     potluck: row.meal_style || null,
     photo_url: linked?.photo_url || null,
     profile_username: linked?.username || null,
+    food_thread: foodThreadFor(row),
+    food_replies: normalizeFoodReplies(row.food_replies),
   }
 }
 
@@ -536,6 +540,7 @@ app.post('/rsvps', (req, res) => {
     const oldIds = oldRows.map((r) => r.id)
     const previousFoodPhotos = oldRows[0]?.food_photos || []
     const previousFoodComment = oldRows[0]?.food_comment || null
+    const previousFoodReplies = oldRows[0]?.food_replies || []
     db.rsvps = db.rsvps.filter((r) => !oldIds.includes(r.id))
     db.sponsorships = db.sponsorships.filter((s) => !oldIds.includes(s.rsvp_id))
 
@@ -551,6 +556,7 @@ app.post('/rsvps', (req, res) => {
       form.foodComment === undefined && form.food_comment === undefined
         ? previousFoodComment
         : normalizeFoodComment(form.foodComment ?? form.food_comment ?? '')
+    const food_replies = previousFoodReplies
 
     const rsvpId = uuid()
     const now = new Date().toISOString()
@@ -570,6 +576,7 @@ app.post('/rsvps', (req, res) => {
       bringing_dish: dish,
       food_photos,
       food_comment,
+      food_replies,
       guest_names: form.guestNames || null,
       guest_count:
         form.guestCount === '' || form.guestCount === null || form.guestCount === undefined
@@ -841,7 +848,7 @@ app.patch('/admin/rsvps/:id', (req, res) => {
   }
 })
 
-/** Guests who already RSVP'd can add/update food photos + comments. */
+/** Owner updates photos/comments; other RSVP'd guests can reply on active sections. */
 app.patch('/rsvps/:id/food', (req, res) => {
   try {
     const db = loadDb()
@@ -857,27 +864,84 @@ app.patch('/rsvps/:id/food', (req, res) => {
     const rsvpName = String(rsvp.full_name || person?.name || '')
       .trim()
       .toLowerCase()
-    const matchesPhone = phoneKey && digits(rsvp.phone) === phoneKey
-    const matchesName = name && rsvpName === name
+    const matchesOwnerPhone = phoneKey && digits(rsvp.phone) === phoneKey
+    const matchesOwnerName = name && rsvpName === name
+    const isOwner = matchesOwnerPhone || matchesOwnerName
     const adminOk = validSession(db, bearerToken(req))
-    if (!adminOk && !matchesPhone && !matchesName) {
-      return res.status(403).json({ error: 'Name or phone must match this RSVP' })
-    }
 
-    if (body.bringing_dish !== undefined || body.bringingDish !== undefined) {
-      rsvp.bringing_dish =
-        String(body.bringing_dish ?? body.bringingDish ?? '').trim() || null
-    }
-    if (body.food_comment !== undefined || body.foodComment !== undefined) {
-      rsvp.food_comment = normalizeFoodComment(
-        body.food_comment ?? body.foodComment ?? '',
-      )
-    }
-    if (body.food_photos !== undefined || body.foodPhotos !== undefined) {
-      rsvp.food_photos = persistFoodPhotos(body.food_photos ?? body.foodPhotos ?? [])
-    } else if (Array.isArray(body.add_photos) || Array.isArray(body.addPhotos)) {
-      const extra = persistFoodPhotos(body.add_photos || body.addPhotos || [])
-      rsvp.food_photos = [...(rsvp.food_photos || []), ...extra].slice(0, 8)
+    const knownGuest = (db.rsvps || []).some((r) => {
+      if (r.week_start !== rsvp.week_start) return false
+      if (phoneKey && digits(r.phone) === phoneKey) return true
+      const p = db.people.find((x) => x.id === r.person_id)
+      const n = String(r.full_name || p?.name || '')
+        .trim()
+        .toLowerCase()
+      return name && n === name
+    })
+
+    const replyText = String(body.reply || body.add_reply || '').trim()
+    const wantsOwnerEdit =
+      body.bringing_dish !== undefined ||
+      body.bringingDish !== undefined ||
+      body.food_comment !== undefined ||
+      body.foodComment !== undefined ||
+      body.food_photos !== undefined ||
+      body.foodPhotos !== undefined ||
+      body.add_photos !== undefined ||
+      body.addPhotos !== undefined
+
+    if (replyText) {
+      if (!adminOk && !isOwner && !knownGuest) {
+        return res
+          .status(403)
+          .json({ error: 'Sign in or use your RSVP name/phone to reply' })
+      }
+      const hasActivity =
+        (rsvp.food_photos || []).length > 0 ||
+        Boolean(String(rsvp.food_comment || '').trim()) ||
+        (rsvp.food_replies || []).length > 0
+      if (!hasActivity && !isOwner && !adminOk) {
+        return res.status(400).json({
+          error: 'Replies open after someone posts a photo or comment here',
+        })
+      }
+      const author =
+        String(body.fullName || body.full_name || '').trim() ||
+        (isOwner ? rsvp.full_name : 'Guest')
+      rsvp.food_replies = normalizeFoodReplies([
+        ...(rsvp.food_replies || []),
+        {
+          id: uuid(),
+          author_name: author,
+          text: replyText.slice(0, 1000),
+          created_at: new Date().toISOString(),
+        },
+      ])
+    } else if (wantsOwnerEdit) {
+      if (!adminOk && !isOwner) {
+        return res.status(403).json({
+          error: 'Only the person who RSVP’d can edit photos on this section',
+        })
+      }
+      if (body.bringing_dish !== undefined || body.bringingDish !== undefined) {
+        rsvp.bringing_dish =
+          String(body.bringing_dish ?? body.bringingDish ?? '').trim() || null
+      }
+      if (body.food_comment !== undefined || body.foodComment !== undefined) {
+        rsvp.food_comment = normalizeFoodComment(
+          body.food_comment ?? body.foodComment ?? '',
+        )
+      }
+      if (body.food_photos !== undefined || body.foodPhotos !== undefined) {
+        rsvp.food_photos = persistFoodPhotos(
+          body.food_photos ?? body.foodPhotos ?? [],
+        )
+      } else if (Array.isArray(body.add_photos) || Array.isArray(body.addPhotos)) {
+        const extra = persistFoodPhotos(body.add_photos || body.addPhotos || [])
+        rsvp.food_photos = [...(rsvp.food_photos || []), ...extra].slice(0, 8)
+      }
+    } else {
+      return res.status(400).json({ error: 'Nothing to update' })
     }
 
     saveDb(db)
