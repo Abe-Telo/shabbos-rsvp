@@ -50,6 +50,25 @@ export function publicUser(user) {
     full_name: user.full_name,
     phone: user.phone || null,
     photo_url: user.photo_url || null,
+    bio: user.bio || null,
+    city: user.city || null,
+    shul: user.shul || null,
+    person_id: user.person_id || null,
+    created_at: user.created_at,
+  }
+}
+
+/** Public card shown to everyone — no phone. */
+export function publicProfile(user) {
+  if (!user) return null
+  return {
+    id: user.id,
+    username: user.username,
+    full_name: user.full_name,
+    photo_url: user.photo_url || null,
+    bio: user.bio || null,
+    city: user.city || null,
+    shul: user.shul || null,
     person_id: user.person_id || null,
     created_at: user.created_at,
   }

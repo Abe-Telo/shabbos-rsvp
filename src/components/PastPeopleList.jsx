@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import PersonAvatar from './PersonAvatar'
 import { getPeople } from '../lib/api'
 
@@ -79,7 +80,16 @@ export default function PastPeopleList({ compact = false }) {
           <div className="person-row" key={p.id}>
             <div className="person-heading">
               <PersonAvatar name={p.name} photoUrl={p.photo_url} />
-              <strong>{p.name}</strong>
+              {p.profile_username ? (
+                <Link
+                  className="person-name-link"
+                  to={`/u/${encodeURIComponent(p.profile_username)}`}
+                >
+                  <strong>{p.name}</strong>
+                </Link>
+              ) : (
+                <strong>{p.name}</strong>
+              )}
             </div>
             <div className="meta">
               Attended {p.times_attended || 0} time

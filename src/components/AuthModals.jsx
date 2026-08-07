@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fileToPhotoData } from '../lib/auth'
 import { useAuth } from '../lib/AuthContext'
 
@@ -292,6 +293,15 @@ export function ProfileMenu() {
               <strong>{user.full_name || user.username}</strong>
               <div className="meta">{user.username}</div>
             </div>
+
+            <Link
+              to="/profile"
+              className="btn btn-ghost"
+              style={{ width: '100%', marginBottom: '0.35rem', textAlign: 'center' }}
+              onClick={() => setMenuOpen(false)}
+            >
+              Profile
+            </Link>
 
             {!editingPhoto ? (
               <button

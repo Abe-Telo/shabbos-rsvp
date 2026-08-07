@@ -5,6 +5,7 @@ import {
   findUserByToken,
   hashPassword,
   normalizeUsername,
+  publicProfile,
   publicUser,
   sanitizePhoto,
   validateUsername,
@@ -86,56 +87,69 @@ function currentSunday(date = new Date()) {
 function mapRsvpPublic(row, db) {
   if (!row) return null
   const { phone, ...rest } = row
+  const linked = findLinkedUser(db, {
+    personId: row.person_id,
+    phone: row.phone,
+    name: row.full_name,
+  })
   return {
     ...rest,
     bringing: row.food_likes || [],
     bringing_other: row.food_likes_other || null,
     potluck: row.meal_style || null,
-    photo_url: findUserPhoto(db, {
-      personId: row.person_id,
-      phone: row.phone,
-      name: row.full_name,
-    }),
+    photo_url: linked?.photo_url || null,
+    profile_username: linked?.username || null,
   }
 }
 
 function mapPersonPublic(row, db) {
   if (!row) return null
   const { phone, phone_digits, ...rest } = row
+  const linked = findLinkedUser(db, {
+    personId: row.id,
+    phone: row.phone,
+    name: row.name,
+  })
   return {
     ...rest,
-    photo_url:
-      findUserPhoto(db, {
-        personId: row.id,
-        phone: row.phone,
-        name: row.name,
-      }) || row.photo_url || null,
+    photo_url: linked?.photo_url || row.photo_url || null,
+    profile_username: linked?.username || null,
   }
 }
 
-function findUserPhoto(db, { personId, phone, name }) {
-  const users = (db?.users || []).filter((u) => u.photo_url)
+function findLinkedUser(db, { personId, phone, name }) {
+  const users = db?.users || []
   if (!users.length) return null
   if (personId) {
-    const hit = users.find((u) => u.person_id === personId)
-    if (hit) return hit.photo_url
+    const hits = users.filter((u) => u.person_id === personId)
+    const withPhoto = hits.find((u) => u.photo_url)
+    if (withPhoto) return withPhoto
+    if (hits[0]) return hits[0]
   }
   const phoneKey = digits(phone)
   if (phoneKey) {
-    const hit = users.find(
+    const hits = users.filter(
       (u) =>
         digits(u.phone) === phoneKey || digits(u.phone_digits) === phoneKey,
     )
-    if (hit) return hit.photo_url
+    const withPhoto = hits.find((u) => u.photo_url)
+    if (withPhoto) return withPhoto
+    if (hits[0]) return hits[0]
   }
   if (name) {
     const n = String(name).toLowerCase()
-    const hit = users.find(
+    const hits = users.filter(
       (u) => String(u.full_name || '').toLowerCase() === n,
     )
-    if (hit) return hit.photo_url
+    const withPhoto = hits.find((u) => u.photo_url)
+    if (withPhoto) return withPhoto
+    if (hits[0]) return hits[0]
   }
   return null
+}
+
+function findUserPhoto(db, opts) {
+  return findLinkedUser(db, opts)?.photo_url || null
 }
 
 function upsertPerson(db, form) {
@@ -311,6 +325,28 @@ app.patch('/auth/me', (req, res) => {
         return res.status(400).json({ error: e.message })
       }
     }
+    if (body.bio !== undefined) {
+      user.bio = String(body.bio || '').trim().slice(0, 2000) || null
+    }
+    if (body.city !== undefined) {
+      user.city = String(body.city || '').trim().slice(0, 120) || null
+    }
+    if (body.shul !== undefined) {
+      user.shul = String(body.shul || '').trim().slice(0, 120) || null
+    }
+    if (body.newPassword) {
+      const current = String(body.currentPassword || body.password || '')
+      const nextPass = String(body.newPassword)
+      if (!verifyPassword(current, user.password_salt, user.password_hash)) {
+        return res.status(401).json({ error: 'Current password is incorrect' })
+      }
+      if (nextPass.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters' })
+      }
+      const { salt, hash } = hashPassword(nextPass)
+      user.password_salt = salt
+      user.password_hash = hash
+    }
     saveDb(db)
     res.json({ user: publicUser(user) })
   } catch (e) {
@@ -325,6 +361,49 @@ app.post('/auth/logout', (req, res) => {
   db.user_sessions = (db.user_sessions || []).filter((s) => s.token !== token)
   saveDb(db)
   res.json({ ok: true })
+})
+
+app.get('/profiles/:username', (req, res) => {
+  const username = normalizeUsername(req.params.username)
+  const db = loadDb()
+  const user = (db.users || []).find((u) => u.username === username)
+  if (!user) return res.status(404).json({ error: 'Profile not found' })
+
+  const person =
+    (user.person_id && db.people.find((p) => p.id === user.person_id)) ||
+    (user.phone &&
+      db.people.find(
+        (p) =>
+          digits(p.phone) === digits(user.phone) ||
+          p.phone_digits === digits(user.phone),
+      )) ||
+    db.people.find(
+      (p) => p.name.toLowerCase() === String(user.full_name || '').toLowerCase(),
+    )
+
+  const history = person
+    ? db.rsvps
+        .filter((r) => r.person_id === person.id)
+        .sort((a, b) => String(b.week_start || '').localeCompare(String(a.week_start || '')))
+        .map((r) => ({
+          id: r.id,
+          week_start: r.week_start,
+          coming: r.coming,
+          bringing_dish: r.bringing_dish || null,
+          meal_style: r.meal_style || null,
+          created_at: r.created_at,
+        }))
+    : []
+
+  res.json({
+    profile: publicProfile(user),
+    stats: {
+      times_attended: person?.times_attended || 0,
+      first_seen: person?.first_seen || user.created_at,
+      last_seen: person?.last_seen || user.created_at,
+    },
+    history,
+  })
 })
 
 app.get('/rsvps', (req, res) => {

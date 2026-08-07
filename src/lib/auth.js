@@ -54,6 +54,9 @@ function publicDemoUser(u) {
     full_name: u.full_name,
     phone: u.phone || null,
     photo_url: u.photo_url || null,
+    bio: u.bio || null,
+    city: u.city || null,
+    shul: u.shul || null,
     person_id: u.person_id || null,
     created_at: u.created_at,
   }
@@ -167,6 +170,18 @@ async function updateDemo(patch) {
   if (patch.photoData || patch.photoUrl !== undefined) {
     u.photo_url = patch.photoData || patch.photoUrl || null
   }
+  if (patch.bio !== undefined) u.bio = String(patch.bio || '').trim() || null
+  if (patch.city !== undefined) u.city = String(patch.city || '').trim() || null
+  if (patch.shul !== undefined) u.shul = String(patch.shul || '').trim() || null
+  if (patch.newPassword) {
+    if (u.password !== String(patch.currentPassword || '')) {
+      throw new Error('Current password is incorrect')
+    }
+    if (String(patch.newPassword).length < 6) {
+      throw new Error('New password must be at least 6 characters')
+    }
+    u.password = String(patch.newPassword)
+  }
   users[idx] = u
   saveDemoUsers(users)
   return publicDemoUser(u)
@@ -224,6 +239,33 @@ export async function updateProfile(patch) {
     body: JSON.stringify(patch),
   })
   return body.user
+}
+
+export async function getPublicProfile(username) {
+  const key = normalizeUsername(username)
+  if (isDemo()) {
+    const user = loadDemoUsers().find((u) => u.username === key)
+    if (!user) throw new Error('Profile not found')
+    return {
+      profile: {
+        id: user.id,
+        username: user.username,
+        full_name: user.full_name,
+        photo_url: user.photo_url || null,
+        bio: user.bio || null,
+        city: user.city || null,
+        shul: user.shul || null,
+        person_id: user.person_id || null,
+        created_at: user.created_at,
+      },
+      stats: { times_attended: 0, first_seen: user.created_at, last_seen: user.created_at },
+      history: [],
+    }
+  }
+  const res = await fetch(`${API_URL}/profiles/${encodeURIComponent(key)}`)
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || 'Profile not found')
+  return body
 }
 
 /** Read a file into a compressed-ish data URL (max ~400KB string). */

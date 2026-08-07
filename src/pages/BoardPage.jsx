@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import PastPeopleList from '../components/PastPeopleList'
 import PersonAvatar from '../components/PersonAvatar'
 import { comingLabel, getWeekRsvps } from '../lib/api'
@@ -232,7 +232,22 @@ export default function BoardPage({ defaultTab = 'coming' }) {
                             size={28}
                           />
                         </td>
-                        <td title={row.name}>{row.name}</td>
+                        <td title={row.name}>
+                          {publicRsvps.find((r) => r.id === row.id)
+                            ?.profile_username ? (
+                            <Link
+                              className="person-name-link"
+                              to={`/u/${encodeURIComponent(
+                                publicRsvps.find((r) => r.id === row.id)
+                                  .profile_username,
+                              )}`}
+                            >
+                              {row.name}
+                            </Link>
+                          ) : (
+                            row.name
+                          )}
+                        </td>
                         <td title={row.coming}>{row.coming}</td>
                         <td title={row.style}>{row.style}</td>
                         <td title={row.start}>{row.start}</td>
@@ -325,7 +340,16 @@ export default function BoardPage({ defaultTab = 'coming' }) {
                           name={r.full_name}
                           photoUrl={r.photo_url}
                         />
-                        <strong>{r.full_name}</strong>
+                        {r.profile_username ? (
+                          <Link
+                            className="person-name-link"
+                            to={`/u/${encodeURIComponent(r.profile_username)}`}
+                          >
+                            <strong>{r.full_name}</strong>
+                          </Link>
+                        ) : (
+                          <strong>{r.full_name}</strong>
+                        )}
                       </div>
                       <div className="tags">
                         <span className="tag tag-warn">{comingLabel(r.coming)}</span>
