@@ -1,14 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { submitRsvp } from '../lib/api'
 import {
   COMING_OPTIONS,
-  emptyForm,
   FEEDBACK_OPTIONS,
   FOOD_LIKE_OPTIONS,
   MEAL_STYLE_OPTIONS,
   SPONSORSHIP_OPTIONS,
 } from '../lib/formConfig'
+import {
+  formForNewWeek,
+  loadRememberedForm,
+  saveRememberedForm,
+} from '../lib/localProfile'
 
 const STEPS = {
   basics: 'basics',
@@ -25,15 +29,21 @@ function nextFromComing(coming) {
 }
 
 export default function FormPage() {
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(loadRememberedForm)
   const [step, setStep] = useState(STEPS.basics)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const remembered =
+    Boolean(form.fullName?.trim()) || Boolean(form.phone?.trim())
 
   const comingOpt = useMemo(
     () => COMING_OPTIONS.find((o) => o.value === form.coming),
     [form.coming],
   )
+
+  useEffect(() => {
+    saveRememberedForm(form)
+  }, [form])
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -55,6 +65,7 @@ export default function FormPage() {
     setSaving(true)
     setError('')
     try {
+      saveRememberedForm(form)
       await submitRsvp(form)
       setStep(STEPS.done)
     } catch (e) {
@@ -101,7 +112,7 @@ export default function FormPage() {
   }
 
   function resetForm() {
-    setForm(emptyForm())
+    setForm(formForNewWeek())
     setStep(STEPS.basics)
     setError('')
   }
@@ -148,7 +159,11 @@ export default function FormPage() {
         <div className="panel">
           <h2>Weekly Shabbos RSVP & coordination</h2>
           <p className="hint">
-            Fill this out for our upcoming Shabbos. Required fields marked with *
+            Fill this out for our upcoming Shabbos. Required fields marked with
+            *
+            {remembered
+              ? ' Your name, phone, and food preferences are remembered on this device for next week.'
+              : ''}
           </p>
 
           <div className="field">
