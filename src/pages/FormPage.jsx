@@ -849,23 +849,30 @@ export default function FormPage() {
             </div>
           </div>
 
-          {form.bringingMoreGuests === 'Yes' && (
+          {(form.bringingMoreGuests === 'Yes' ||
+            form.bringingMoreGuests === 'Not sure') && (
             <>
               <div className="field">
-                <label>Guest names</label>
+                <label>
+                  {form.bringingMoreGuests === 'Not sure'
+                    ? 'If you might bring guests, about how many?'
+                    : 'How many additional guests?'}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.guestCount}
+                  onChange={(e) => setField('guestCount', e.target.value)}
+                  placeholder="e.g. 1"
+                />
+              </div>
+              <div className="field">
+                <label>Guest names (if you know)</label>
                 <input
                   type="text"
                   value={form.guestNames}
                   onChange={(e) => setField('guestNames', e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label>How many additional guests?</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={form.guestCount}
-                  onChange={(e) => setField('guestCount', e.target.value)}
+                  placeholder="Optional"
                 />
               </div>
             </>

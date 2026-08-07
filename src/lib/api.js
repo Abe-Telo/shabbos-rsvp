@@ -91,7 +91,12 @@ function rsvpPayload(form, personId, weekStart, id) {
     bringing_other: form.foodLikesOther || null,
     dietary_notes: null,
     guest_names: form.guestNames || null,
-    guest_count: form.guestCount ? Number(form.guestCount) : null,
+    guest_count:
+      form.guestCount === '' ||
+      form.guestCount === null ||
+      form.guestCount === undefined
+        ? null
+        : Number(form.guestCount),
     guest_overnight: form.guestOvernight || null,
     heard_about: form.heardAbout || null,
     invited_by: form.invitedBy || null,

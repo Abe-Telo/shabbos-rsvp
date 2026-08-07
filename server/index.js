@@ -548,7 +548,10 @@ app.post('/rsvps', (req, res) => {
       food_likes_other: form.foodLikesOther || null,
       bringing_dish: dish,
       guest_names: form.guestNames || null,
-      guest_count: form.guestCount ? Number(form.guestCount) : null,
+      guest_count:
+        form.guestCount === '' || form.guestCount === null || form.guestCount === undefined
+          ? null
+          : Number(form.guestCount),
       guest_overnight: form.guestOvernight || null,
       heard_about: form.heardAbout || null,
       invited_by: form.invitedBy || null,
