@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import FoodSectionCard from '../components/FoodSectionCard'
+import PastFoodGallery from '../components/PastFoodGallery'
 import PastPeopleList from '../components/PastPeopleList'
 import PersonAvatar from '../components/PersonAvatar'
 import { comingLabel, findMyRsvpThisWeek, getWeekCapacity, getWeekRsvps } from '../lib/api'
@@ -37,6 +38,13 @@ function saveFoodIdentity(identity) {
 
 function tabFromPath(pathname, defaultTab) {
   if (defaultTab === 'food' || pathname.endsWith('/food')) return 'food'
+  if (
+    defaultTab === 'pastfood' ||
+    pathname.endsWith('/food-history') ||
+    pathname.endsWith('/past-food')
+  ) {
+    return 'pastfood'
+  }
   if (defaultTab === 'past' || pathname.endsWith('/people')) return 'past'
   if (defaultTab === 'sheet' || pathname.endsWith('/sheet')) return 'sheet'
   return 'coming'
@@ -146,6 +154,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
   function selectTab(next) {
     setTab(next)
     if (next === 'food') navigate('/food')
+    else if (next === 'pastfood') navigate('/food-history')
     else if (next === 'past') navigate('/people')
     else if (next === 'sheet') navigate('/sheet')
     else navigate('/board')
@@ -246,7 +255,9 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         <h1>
           {tab === 'food'
             ? 'Food this week'
-            : tab === 'past'
+            : tab === 'pastfood'
+              ? 'Past Shabbos food'
+              : tab === 'past'
               ? 'Past people'
               : tab === 'sheet'
                 ? 'Sheet view'
@@ -255,7 +266,9 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         <p>
           {tab === 'food'
             ? `Dishes people are bringing for ${formatWeekLabel(week)}.`
-            : tab === 'past'
+            : tab === 'pastfood'
+              ? 'A gallery of dishes from earlier weeks — not mixed into this Shabbos.'
+              : tab === 'past'
               ? 'Everyone who has ever joined — all weeks, attendance counts, and food history.'
               : tab === 'sheet'
                 ? `Spreadsheet of public RSVPs for ${formatWeekLabel(week)}. Phones and sponsorship stay private.`
@@ -263,11 +276,11 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         </p>
       </section>
 
-      {error && tab !== 'past' && (
+      {error && tab !== 'past' && tab !== 'pastfood' && (
         <div className="banner banner-err">{error}</div>
       )}
 
-      {tab !== 'past' && (
+      {tab !== 'past' && tab !== 'pastfood' && (
         <div className="stats">
           <div className="stat">
             <span className="n">{stats.coming}</span>
@@ -311,6 +324,13 @@ export default function BoardPage({ defaultTab = 'coming' }) {
         </button>
         <button
           type="button"
+          className={`btn ${tab === 'pastfood' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => selectTab('pastfood')}
+        >
+          Past food
+        </button>
+        <button
+          type="button"
           className={`btn ${tab === 'past' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => selectTab('past')}
         >
@@ -326,6 +346,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
       </div>
 
       {tab === 'past' && <PastPeopleList compact />}
+      {tab === 'pastfood' && <PastFoodGallery />}
 
       {tab === 'sheet' && (
         <div className="panel">
@@ -406,6 +427,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
             After you RSVP, use <strong>+</strong> on your section for photos.
             Comment under your name, or reply on someone else&apos;s section once
             they&apos;ve posted. Signed-in guests are unlocked automatically.
+            Earlier weeks live under <strong>Past food</strong>.
           </p>
           {loading && <p className="meta">Loading…</p>}
           {!loading && stats.dishes.length === 0 && (

@@ -519,6 +519,30 @@ select {
   gap: 0.35rem;
 }
 
+.past-week-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.past-week-photos img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.past-food-week {
+  margin-top: 1.25rem;
+}
+
+.past-food-week-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  margin: 0 0 0.55rem;
+}
+
 .person-name-link {
   color: inherit;
   text-decoration: none;

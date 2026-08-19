@@ -141,7 +141,7 @@ export const FEEDBACK_OPTIONS = [
 
 export const GUEST_FILL_OPTIONS = [
   { value: 'yes', label: 'Yes — they will fill out this form themselves' },
-  { value: 'no', label: 'No — I am RSVPing for them' },
+  { value: 'no', label: 'No — I am RSVPing for them (I’ll add names next)' },
   { value: 'unsure', label: 'Not sure yet' },
 ]
 

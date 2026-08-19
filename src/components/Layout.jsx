@@ -14,6 +14,7 @@ const PRIMARY_LINKS = [
   { to: '/', end: true, label: 'Form' },
   { to: '/board', label: 'This week' },
   { to: '/food', label: 'Food' },
+  { to: '/food-history', label: 'Past food' },
   { to: '/people', label: 'Past people' },
 ]
 

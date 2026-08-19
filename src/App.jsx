@@ -16,6 +16,7 @@ export default function App() {
             <Route index element={<FormPage />} />
             <Route path="board" element={<BoardPage />} />
             <Route path="food" element={<BoardPage defaultTab="food" />} />
+            <Route path="food-history" element={<BoardPage defaultTab="pastfood" />} />
             <Route path="people" element={<BoardPage defaultTab="past" />} />
             <Route path="sheet" element={<BoardPage defaultTab="sheet" />} />
             <Route path="profile" element={<ProfilePage />} />

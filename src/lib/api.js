@@ -51,6 +51,49 @@ function normalizePhone(phone) {
   return (phone || '').replace(/\D/g, '')
 }
 
+function photoUrlOf(p) {
+  return typeof p === 'string' ? p : String(p?.url || '')
+}
+
+function earlierPhotoUrls(rsvps, personId, weekStart) {
+  const urls = new Set()
+  for (const r of rsvps || []) {
+    if (r.person_id !== personId) continue
+    if (String(r.week_start || '') >= String(weekStart || '')) continue
+    for (const p of r.food_photos || []) {
+      const u = photoUrlOf(p)
+      if (u) urls.add(u)
+    }
+  }
+  return urls
+}
+
+function earlierComments(rsvps, personId, weekStart) {
+  const set = new Set()
+  for (const r of rsvps || []) {
+    if (r.person_id !== personId) continue
+    if (String(r.week_start || '') >= String(weekStart || '')) continue
+    const c = String(r.food_comment || '').trim().toLowerCase()
+    if (c) set.add(c)
+  }
+  return set
+}
+
+function thisWeekOnlyMedia(row, rsvps) {
+  const urls = earlierPhotoUrls(rsvps, row.person_id, row.week_start)
+  const comments = earlierComments(rsvps, row.person_id, row.week_start)
+  const food_photos = (row.food_photos || []).filter((p) => !urls.has(photoUrlOf(p)))
+  const raw = String(row.food_comment || '').trim()
+  const food_comment = raw && comments.has(raw.toLowerCase()) ? null : raw || null
+  return { food_photos, food_comment }
+}
+
+/** RSVP answers can carry over; food photos stay with that Shabbos. */
+export function formCarryoverWithoutFood(form) {
+  if (!form) return form
+  return { ...form, foodPhotos: [], foodComment: '' }
+}
+
 function foodPrefsFromForm(form) {
   const parts = [...(form.foodLikes || [])]
   if (form.foodLikesOther) parts.push(form.foodLikesOther)
@@ -270,6 +313,9 @@ async function submitLocal(form) {
 
   const rsvpId = uid()
   const rsvp = rsvpPayload(form, person.id, weekStart, rsvpId)
+  const media = thisWeekOnlyMedia(rsvp, data.rsvps)
+  rsvp.food_photos = media.food_photos
+  rsvp.food_comment = media.food_comment
   data.rsvps.push(rsvp)
 
   if (form.sponsorship?.length || form.sponsorshipNotes || form.potluckContribution) {
@@ -296,6 +342,33 @@ async function getWeekRsvpsLocal(weekStart = currentSunday()) {
   return data.rsvps
     .filter((r) => r.week_start === weekStart)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .map((r) => ({ ...r, ...thisWeekOnlyMedia(r, data.rsvps) }))
+}
+
+async function getFoodHistoryLocal() {
+  const data = loadLocal()
+  const before = currentSunday()
+  const byWeek = new Map()
+  for (const r of data.rsvps || []) {
+    if (String(r.week_start || '') >= before) continue
+    const photos = Array.isArray(r.food_photos) ? r.food_photos : []
+    const comment = String(r.food_comment || '').trim()
+    if (!photos.length && !comment) continue
+    const list = byWeek.get(r.week_start) || []
+    list.push({
+      id: r.id,
+      name: r.full_name,
+      dish: r.bringing_dish || '',
+      food_comment: comment || null,
+      food_photos: photos,
+      photo_url: r.photo_url || null,
+      profile_username: r.profile_username || null,
+    })
+    byWeek.set(r.week_start, list)
+  }
+  return [...byWeek.entries()]
+    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+    .map(([week_start, dishes]) => ({ week_start, dishes }))
 }
 
 async function getPeopleLocal() {
@@ -644,6 +717,14 @@ export async function findMyRsvpThisWeek(opts) {
 
 export async function findMyRsvpLastWeek(opts) {
   return findMyRsvpForWeek(previousSunday(), opts)
+}
+
+export async function getFoodHistory() {
+  if (API_URL) {
+    const data = await api('/food-history')
+    return data.weeks || []
+  }
+  return getFoodHistoryLocal()
 }
 
 export async function getWeekRsvps(weekStart) {

@@ -116,6 +116,18 @@ export default function PublicProfilePage() {
                     {r.bringing_dish && (
                       <div className="meta">Brought: {r.bringing_dish}</div>
                     )}
+                    {r.food_comment && (
+                      <div className="meta">{r.food_comment}</div>
+                    )}
+                    {(r.food_photos || []).length > 0 && (
+                      <div className="past-week-photos">
+                        {r.food_photos.map((p, i) => {
+                          const src = typeof p === 'string' ? p : p?.url
+                          if (!src) return null
+                          return <img key={src + i} src={src} alt="" />
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

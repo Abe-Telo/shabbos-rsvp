@@ -134,6 +134,46 @@ function currentSunday(date = new Date()) {
   return `${y}-${m}-${day}`
 }
 
+function photoUrlOf(p) {
+  return typeof p === 'string' ? p : String(p?.url || '')
+}
+
+function earlierPhotoUrls(db, personId, weekStart) {
+  const urls = new Set()
+  if (!personId) return urls
+  for (const r of db.rsvps || []) {
+    if (r.person_id !== personId) continue
+    if (String(r.week_start || '') >= String(weekStart || '')) continue
+    for (const p of r.food_photos || []) {
+      const u = photoUrlOf(p)
+      if (u) urls.add(u)
+    }
+  }
+  return urls
+}
+
+function earlierComments(db, personId, weekStart) {
+  const set = new Set()
+  if (!personId) return set
+  for (const r of db.rsvps || []) {
+    if (r.person_id !== personId) continue
+    if (String(r.week_start || '') >= String(weekStart || '')) continue
+    const c = String(r.food_comment || '').trim().toLowerCase()
+    if (c) set.add(c)
+  }
+  return set
+}
+
+/** Drop photos/comments that already belong to an earlier Shabbos for this person. */
+function thisWeekOnlyMedia(row, db) {
+  const urls = earlierPhotoUrls(db, row.person_id, row.week_start)
+  const comments = earlierComments(db, row.person_id, row.week_start)
+  const food_photos = (row.food_photos || []).filter((p) => !urls.has(photoUrlOf(p)))
+  const raw = String(row.food_comment || '').trim()
+  const food_comment = raw && comments.has(raw.toLowerCase()) ? null : raw || null
+  return { food_photos, food_comment }
+}
+
 function mapRsvpPublic(row, db) {
   if (!row) return null
   const { phone, ...rest } = row
@@ -142,14 +182,17 @@ function mapRsvpPublic(row, db) {
     phone: row.phone,
     name: row.full_name,
   })
+  const media = thisWeekOnlyMedia(row, db)
+  const display = { ...row, ...media }
   return {
     ...rest,
+    ...media,
     bringing: row.food_likes || [],
     bringing_other: row.food_likes_other || null,
     potluck: row.meal_style || null,
     photo_url: linked?.photo_url || null,
     profile_username: linked?.username || null,
-    food_thread: foodThreadFor(row),
+    food_thread: foodThreadFor(display),
     food_replies: normalizeFoodReplies(row.food_replies),
   }
 }
@@ -182,6 +225,8 @@ function mapPersonPublic(row, db) {
           ? r.meal_start_other || 'Other'
           : r.meal_start_time || null,
       food_likes: uniqueStrings(r.food_likes || []),
+      food_comment: r.food_comment || null,
+      food_photos: Array.isArray(r.food_photos) ? r.food_photos : [],
     }))
 
   return {
@@ -497,6 +542,8 @@ app.get('/profiles/:username', (req, res) => {
           coming: r.coming,
           bringing_dish: r.bringing_dish || null,
           meal_style: r.meal_style || null,
+          food_comment: r.food_comment || null,
+          food_photos: Array.isArray(r.food_photos) ? r.food_photos : [],
           created_at: r.created_at,
         }))
     : []
@@ -520,6 +567,39 @@ app.get('/rsvps', (req, res) => {
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
     .map((r) => mapRsvpPublic(r, db))
   res.json({ week_start: week, rsvps: rows, ...capacityPayload(db, week) })
+})
+
+app.get('/food-history', (_req, res) => {
+  const before = currentSunday()
+  const db = loadDb()
+  const byWeek = new Map()
+  for (const r of db.rsvps || []) {
+    if (String(r.week_start || '') >= before) continue
+    const photos = Array.isArray(r.food_photos) ? r.food_photos : []
+    const comment = String(r.food_comment || '').trim()
+    if (!photos.length && !comment) continue
+    const linked = findLinkedUser(db, {
+      personId: r.person_id,
+      phone: r.phone,
+      name: r.full_name,
+    })
+    const entry = {
+      id: r.id,
+      name: r.full_name,
+      dish: r.bringing_dish || '',
+      food_comment: comment || null,
+      food_photos: photos,
+      photo_url: linked?.photo_url || null,
+      profile_username: linked?.username || null,
+    }
+    const list = byWeek.get(r.week_start) || []
+    list.push(entry)
+    byWeek.set(r.week_start, list)
+  }
+  const weeks = [...byWeek.entries()]
+    .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+    .map(([week_start, dishes]) => ({ week_start, dishes }))
+  res.json({ weeks })
 })
 
 /** Lookup own submission for this week (requires phone match). */
@@ -613,14 +693,23 @@ app.post('/rsvps', (req, res) => {
       String(form.bringingDish || form.potluckContribution || '').trim() || null
 
     const sentPhotos = form.foodPhotos || form.food_photos
-    const food_photos =
+    const rawPhotos =
       sentPhotos === undefined
         ? previousFoodPhotos
         : persistFoodPhotos(sentPhotos || [])
-    const food_comment =
+    const olderUrls = earlierPhotoUrls(db, person.id, weekStart)
+    const olderComments = earlierComments(db, person.id, weekStart)
+    const food_photos = (rawPhotos || []).filter((p) => !olderUrls.has(photoUrlOf(p)))
+    let food_comment =
       form.foodComment === undefined && form.food_comment === undefined
         ? previousFoodComment
         : normalizeFoodComment(form.foodComment ?? form.food_comment ?? '')
+    if (
+      food_comment &&
+      olderComments.has(String(food_comment).trim().toLowerCase())
+    ) {
+      food_comment = null
+    }
     const food_replies = previousFoodReplies
 
     const rsvpId = uuid()
@@ -1017,18 +1106,27 @@ app.patch('/rsvps/:id/food', (req, res) => {
         rsvp.bringing_dish =
           String(body.bringing_dish ?? body.bringingDish ?? '').trim() || null
       }
+      const olderUrls = earlierPhotoUrls(db, rsvp.person_id, rsvp.week_start)
+      const olderComments = earlierComments(db, rsvp.person_id, rsvp.week_start)
       if (body.food_comment !== undefined || body.foodComment !== undefined) {
-        rsvp.food_comment = normalizeFoodComment(
+        const nextComment = normalizeFoodComment(
           body.food_comment ?? body.foodComment ?? '',
         )
+        rsvp.food_comment =
+          nextComment && olderComments.has(String(nextComment).trim().toLowerCase())
+            ? null
+            : nextComment
       }
       if (body.food_photos !== undefined || body.foodPhotos !== undefined) {
         rsvp.food_photos = persistFoodPhotos(
           body.food_photos ?? body.foodPhotos ?? [],
-        )
+        ).filter((p) => !olderUrls.has(photoUrlOf(p)))
       } else if (Array.isArray(body.add_photos) || Array.isArray(body.addPhotos)) {
-        const extra = persistFoodPhotos(body.add_photos || body.addPhotos || [])
-        rsvp.food_photos = [...(rsvp.food_photos || []), ...extra].slice(0, 8)
+        const extra = persistFoodPhotos(body.add_photos || body.addPhotos || []).filter(
+          (p) => !olderUrls.has(photoUrlOf(p)),
+        )
+        const kept = (rsvp.food_photos || []).filter((p) => !olderUrls.has(photoUrlOf(p)))
+        rsvp.food_photos = [...kept, ...extra].slice(0, 8)
       }
     } else {
       return res.status(400).json({ error: 'Nothing to update' })

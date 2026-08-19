@@ -81,6 +81,18 @@ function PastWeekRow({ week }) {
           </span>
         ))}
       </div>
+      {week.food_comment && (
+        <div className="meta">{week.food_comment}</div>
+      )}
+      {(week.food_photos || []).length > 0 && (
+        <div className="past-week-photos">
+          {(week.food_photos || []).map((p, i) => {
+            const src = typeof p === 'string' ? p : p?.url
+            if (!src) return null
+            return <img key={src + i} src={src} alt="" />
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { comingLabel, findMyRsvpLastWeek, findMyRsvpThisWeek, getWeekCapacity, submitRsvp } from '../lib/api'
+import { comingLabel, findMyRsvpLastWeek, findMyRsvpThisWeek, formCarryoverWithoutFood, getWeekCapacity, submitRsvp } from '../lib/api'
 import {
   COMING_OPTIONS,
   FEEDBACK_OPTIONS,
@@ -370,20 +370,21 @@ export default function FormPage() {
   }
 
   function startChangesFromLastWeek() {
-    setForm(lastWeek?.form || form)
+    setForm(formCarryoverWithoutFood(lastWeek?.form || form))
     setStep(STEPS.basics)
   }
 
   async function submitSameAsLastWeek() {
     if (!lastWeek?.form) return
-    setForm(lastWeek.form)
+    const payload = formCarryoverWithoutFood(lastWeek.form)
+    setForm(payload)
     setSaving(true)
     setError('')
     try {
-      saveRememberedForm(lastWeek.form)
-      const result = await submitRsvp(lastWeek.form)
+      saveRememberedForm(payload)
+      const result = await submitRsvp(payload)
       setExisting({
-        form: { ...lastWeek.form },
+        form: { ...payload },
         week_start: result?.rsvp?.week_start,
       })
       setSubmittedPersonId(result?.person?.id || null)
@@ -422,8 +423,35 @@ export default function FormPage() {
       return
     }
     setError('')
+    if (form.coming === 'yes_guest') {
+      setForm((f) => ({
+        ...f,
+        guestCount:
+          !f.guestCount || Number(f.guestCount) < 1 ? '1' : f.guestCount,
+      }))
+    }
     const next = nextFromComing(form.coming)
     setStep(STEPS[next] || STEPS.prefs)
+  }
+
+  function goAfterGuests() {
+    if (!form.guestWillFillForm) {
+      setError(
+        'Please say whether your guests will fill out the form, or if you are RSVPing for them.',
+      )
+      return
+    }
+    const count = Number(form.guestCount)
+    if (!Number.isFinite(count) || count < 1) {
+      setError('How many extra guests are you bringing? (at least 1)')
+      return
+    }
+    if (form.guestWillFillForm === 'no' && !String(form.guestNames || '').trim()) {
+      setError('Please add the names of the guests you are RSVPing for.')
+      return
+    }
+    setError('')
+    setStep(STEPS.prefs)
   }
 
   function goAfterPrefs() {
@@ -438,6 +466,16 @@ export default function FormPage() {
     if (form.mealStartTime === 'other' && !form.mealStartOther.trim()) {
       setError('Please write the meal start time that works for you.')
       return
+    }
+    if (
+      (form.coming === 'yes' || form.coming === 'probably') &&
+      form.bringingMoreGuests === 'Yes'
+    ) {
+      const count = Number(form.guestCount)
+      if (!Number.isFinite(count) || count < 1) {
+        setError('How many extra guests are you bringing?')
+        return
+      }
     }
     setError('')
     // Regular coming paths get optional sponsorship, then feedback
@@ -762,51 +800,16 @@ export default function FormPage() {
 
       {step === STEPS.guests && (
         <div className="panel">
-          <h2>Guest info</h2>
+          <h2>Extra guests</h2>
           <p className="hint">
-            Tell us about the guests you&apos;re bringing.
+            You said you&apos;re bringing someone. First tell us who is filling
+            out the form, then we&apos;ll ask how many and their names.
           </p>
 
           <div className="field">
-            <label>Guest names</label>
-            <input
-              type="text"
-              value={form.guestNames}
-              onChange={(e) => setField('guestNames', e.target.value)}
-              placeholder="Names"
-            />
-          </div>
-
-          <div className="field">
-            <label>How many additional guests?</label>
-            <input
-              type="number"
-              min="1"
-              value={form.guestCount}
-              onChange={(e) => setField('guestCount', e.target.value)}
-            />
-          </div>
-
-          <div className="field">
-            <label>Will any guest stay overnight?</label>
-            <div className="choices">
-              {['Yes', 'No', 'Not sure'].map((v) => (
-                <label className="choice" key={v}>
-                  <input
-                    type="radio"
-                    name="overnight"
-                    checked={form.guestOvernight === v}
-                    onChange={() => setField('guestOvernight', v)}
-                  />
-                  <span>{v}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
             <label>
-              Do your guests plan to fill out this form themselves?
+              Do your guests plan to fill out this form themselves?{' '}
+              <span className="req">*</span>
             </label>
             <div className="choices">
               {GUEST_FILL_OPTIONS.map((opt) => (
@@ -815,13 +818,83 @@ export default function FormPage() {
                     type="radio"
                     name="guestWillFillForm"
                     checked={form.guestWillFillForm === opt.value}
-                    onChange={() => setField('guestWillFillForm', opt.value)}
+                    onChange={() => {
+                      setError('')
+                      setForm((f) => ({
+                        ...f,
+                        guestWillFillForm: opt.value,
+                        guestCount:
+                          !f.guestCount || Number(f.guestCount) < 1
+                            ? '1'
+                            : f.guestCount,
+                      }))
+                    }}
                   />
                   <span>{opt.label}</span>
                 </label>
               ))}
             </div>
           </div>
+
+          {form.guestWillFillForm && (
+            <>
+              <div className="field">
+                <label>
+                  How many extra guests are you bringing?{' '}
+                  <span className="req">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  value={form.guestCount}
+                  onChange={(e) => setField('guestCount', e.target.value)}
+                  placeholder="e.g. 1"
+                />
+              </div>
+
+              <div className="field">
+                <label>
+                  Guest names
+                  {form.guestWillFillForm === 'no' ? (
+                    <>
+                      {' '}
+                      <span className="req">*</span>
+                    </>
+                  ) : (
+                    ' (if you know)'
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={form.guestNames}
+                  onChange={(e) => setField('guestNames', e.target.value)}
+                  placeholder={
+                    form.guestWillFillForm === 'no'
+                      ? 'e.g. Sarah Cohen, Dovid Levy'
+                      : 'Optional'
+                  }
+                />
+              </div>
+
+              <div className="field">
+                <label>Will any guest stay overnight?</label>
+                <div className="choices">
+                  {['Yes', 'No', 'Not sure'].map((v) => (
+                    <label className="choice" key={v}>
+                      <input
+                        type="radio"
+                        name="overnight"
+                        checked={form.guestOvernight === v}
+                        onChange={() => setField('guestOvernight', v)}
+                      />
+                      <span>{v}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="actions">
             <button
@@ -834,7 +907,7 @@ export default function FormPage() {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setStep(STEPS.prefs)}
+              onClick={goAfterGuests}
             >
               Continue
             </button>
@@ -1081,6 +1154,57 @@ export default function FormPage() {
             setField={setField}
             toggleArray={toggleArray}
           />
+          {(form.coming === 'yes' || form.coming === 'probably') && (
+            <>
+              <div className="field">
+                <label>Are you bringing extra guests?</label>
+                <div className="choices">
+                  {['Yes', 'No'].map((v) => (
+                    <label className="choice" key={v}>
+                      <input
+                        type="radio"
+                        name="bringingMoreGuestsPrefs"
+                        checked={form.bringingMoreGuests === v}
+                        onChange={() => {
+                          setField('bringingMoreGuests', v)
+                          if (v === 'No') {
+                            setField('guestCount', '')
+                          }
+                        }}
+                      />
+                      <span>{v}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {form.bringingMoreGuests === 'Yes' && (
+                <>
+                  <div className="field">
+                    <label>
+                      How many extra guests? <span className="req">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={form.guestCount}
+                      onChange={(e) => setField('guestCount', e.target.value)}
+                      placeholder="e.g. 1"
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Guest names (if you know)</label>
+                    <input
+                      type="text"
+                      value={form.guestNames}
+                      onChange={(e) => setField('guestNames', e.target.value)}
+                      placeholder="e.g. Sarah Cohen"
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
           <div className="actions">
             <button
               type="button"
