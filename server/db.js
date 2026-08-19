@@ -19,13 +19,19 @@ function empty() {
     admin_sessions: [],
     users: [],
     user_sessions: [],
+    week_settings: {},
   }
 }
 
 export function loadDb() {
   try {
     if (fs.existsSync(dbPath)) {
-      return { ...empty(), ...JSON.parse(fs.readFileSync(dbPath, 'utf8')) }
+      const parsed = JSON.parse(fs.readFileSync(dbPath, 'utf8'))
+      return {
+        ...empty(),
+        ...parsed,
+        week_settings: parsed.week_settings || {},
+      }
     }
   } catch (e) {
     console.error('Failed to read DB, starting empty:', e.message)

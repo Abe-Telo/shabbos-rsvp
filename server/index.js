@@ -30,6 +30,49 @@ const ATTENDING = new Set([
   'unsure',
   'help',
 ])
+const MEAL_SEATS = new Set([
+  'yes',
+  'yes_guest',
+  'yes_new',
+  'probably',
+  'social',
+  'unsure',
+])
+
+function seatsForRsvp(rsvp) {
+  if (!MEAL_SEATS.has(rsvp?.coming)) return 0
+  return 1 + (Number(rsvp.guest_count) || 0)
+}
+
+function parseGuestLimit(raw) {
+  if (raw === null || raw === undefined || raw === '') return null
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 1) return null
+  return Math.min(500, Math.floor(n))
+}
+
+function weekGuestLimit(db, week) {
+  return parseGuestLimit(db.week_settings?.[week]?.guest_limit)
+}
+
+function weekSeatCount(db, week, excludePersonId = null) {
+  return (db.rsvps || []).reduce((n, r) => {
+    if (r.week_start !== week) return n
+    if (excludePersonId && r.person_id === excludePersonId) return n
+    return n + seatsForRsvp(r)
+  }, 0)
+}
+
+function capacityPayload(db, week) {
+  const guest_limit = weekGuestLimit(db, week)
+  const seat_count = weekSeatCount(db, week)
+  return {
+    week_start: week,
+    guest_limit,
+    seat_count,
+    spots_left: guest_limit == null ? null : Math.max(0, guest_limit - seat_count),
+  }
+}
 
 const app = express()
 app.use(
@@ -476,7 +519,7 @@ app.get('/rsvps', (req, res) => {
     .filter((r) => r.week_start === week)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
     .map((r) => mapRsvpPublic(r, db))
-  res.json({ week_start: week, rsvps: rows })
+  res.json({ week_start: week, rsvps: rows, ...capacityPayload(db, week) })
 })
 
 /** Lookup own submission for this week (requires phone match). */
@@ -534,6 +577,28 @@ app.post('/rsvps', (req, res) => {
     const db = loadDb()
     const person = upsertPerson(db, { ...form, weekStart })
 
+    const guestCount =
+      form.guestCount === '' || form.guestCount === null || form.guestCount === undefined
+        ? null
+        : Number(form.guestCount)
+    const nextSeats = seatsForRsvp({ coming: form.coming, guest_count: guestCount })
+    const limit = weekGuestLimit(db, weekStart)
+    if (limit != null && nextSeats > 0) {
+      const used = weekSeatCount(db, weekStart, person.id)
+      if (used + nextSeats > limit) {
+        const left = Math.max(0, limit - used)
+        return res.status(400).json({
+          error:
+            left === 0
+              ? `This week is full (${limit} people). Ask the host if a spot opens.`
+              : `Only ${left} spot${left === 1 ? '' : 's'} left this week (limit ${limit}).`,
+          guest_limit: limit,
+          seat_count: used,
+          spots_left: left,
+        })
+      }
+    }
+
     const oldRows = db.rsvps.filter(
       (r) => r.person_id === person.id && r.week_start === weekStart,
     )
@@ -578,10 +643,7 @@ app.post('/rsvps', (req, res) => {
       food_comment,
       food_replies,
       guest_names: form.guestNames || null,
-      guest_count:
-        form.guestCount === '' || form.guestCount === null || form.guestCount === undefined
-          ? null
-          : Number(form.guestCount),
+      guest_count: guestCount,
       guest_overnight: form.guestOvernight || null,
       heard_about: form.heardAbout || null,
       invited_by: form.invitedBy || null,
@@ -668,6 +730,8 @@ app.post('/admin/unlock', (req, res) => {
             name: r.full_name,
           }),
         })),
+      week_settings: db.week_settings || {},
+      capacity: capacityPayload(db, currentSunday()),
     })
   }
 
@@ -708,6 +772,8 @@ app.post('/admin/unlock', (req, res) => {
           name: r.full_name,
         }),
       })),
+    week_settings: db.week_settings || {},
+    capacity: capacityPayload(db, currentSunday()),
   })
 })
 
@@ -720,6 +786,30 @@ function requireAdmin(req, res) {
   }
   return db
 }
+
+app.patch('/admin/settings', (req, res) => {
+  try {
+    const db = requireAdmin(req, res)
+    if (!db) return
+    const body = req.body || {}
+    const week = body.week_start || body.weekStart || currentSunday()
+    db.week_settings = db.week_settings || {}
+    const prev = db.week_settings[week] || {}
+    if (body.guest_limit !== undefined || body.guestLimit !== undefined) {
+      prev.guest_limit = parseGuestLimit(body.guest_limit ?? body.guestLimit)
+    }
+    db.week_settings[week] = prev
+    saveDb(db)
+    res.json({
+      week_start: week,
+      settings: prev,
+      capacity: capacityPayload(db, week),
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(400).json({ error: e.message || 'Update failed' })
+  }
+})
 
 app.patch('/admin/rsvps/:id', (req, res) => {
   try {

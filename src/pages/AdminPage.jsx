@@ -7,12 +7,14 @@ import {
   storageMode,
   unlockAdmin,
   updateAdminRsvp,
+  updateAdminSettings,
 } from '../lib/api'
 import {
   COMING_OPTIONS,
   comingOptionLabel,
   mealStartLabel,
   mealStyleLabel,
+  seatsForRsvp,
 } from '../lib/formConfig'
 import { currentSunday, formatWeekLabel } from '../lib/week'
 import { fileToFoodPhotoData } from '../lib/auth'
@@ -439,6 +441,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState('sheet')
   const [historyPerson, setHistoryPerson] = useState(null)
+  const [guestLimitDraft, setGuestLimitDraft] = useState('')
+  const [settingsMsg, setSettingsMsg] = useState('')
+  const [savingSettings, setSavingSettings] = useState(false)
   const week = currentSunday()
 
   function openHistory(personOrRow) {
@@ -469,6 +474,11 @@ export default function AdminPage() {
       setRows(list)
       setPeople(data.people || [])
       setRsvps(data.rsvps || [])
+      const limit =
+        data.capacity?.guest_limit ??
+        data.week_settings?.[week]?.guest_limit ??
+        null
+      setGuestLimitDraft(limit == null ? '' : String(limit))
       setUnlocked(true)
     } catch (e) {
       clearAdminSession()
@@ -505,7 +515,42 @@ export default function AdminPage() {
     setRows([])
     setPeople([])
     setRsvps([])
+    setGuestLimitDraft('')
+    setSettingsMsg('')
   }
+
+  async function saveGuestLimit(e) {
+    e.preventDefault()
+    setSavingSettings(true)
+    setSettingsMsg('')
+    setError('')
+    try {
+      const raw = guestLimitDraft.trim()
+      const body = await updateAdminSettings({
+        week_start: week,
+        guest_limit: raw === '' ? null : Number(raw),
+      })
+      const saved = body.capacity?.guest_limit ?? body.settings?.guest_limit ?? null
+      setGuestLimitDraft(saved == null ? '' : String(saved))
+      setSettingsMsg(
+        saved == null
+          ? 'No guest limit this week — RSVPs are open.'
+          : `Guest limit set to ${saved} for this week.`,
+      )
+    } catch (err) {
+      setError(err.message || 'Could not save settings')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
+  const thisWeekSeatCount = useMemo(
+    () =>
+      rsvps
+        .filter((r) => r.week_start === week)
+        .reduce((n, r) => n + seatsForRsvp(r), 0),
+    [rsvps, week],
+  )
 
   function exportPrivateSheet() {
     const header = [
@@ -743,6 +788,71 @@ export default function AdminPage() {
 
           {error && <div className="banner banner-err">{error}</div>}
           {loading && <p className="meta">Loading…</p>}
+
+          <div className="panel" style={{ marginBottom: '1rem' }}>
+            <h2>This week settings</h2>
+            <p className="hint">
+              Optional cap for {formatWeekLabel(week)}. Counts each meal RSVP plus
+              extra guests they list. Leave blank for no limit. Resets with the
+              week on Sunday.
+            </p>
+            <form onSubmit={saveGuestLimit}>
+              <div className="field">
+                <label>Guest limit</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  inputMode="numeric"
+                  placeholder="No limit"
+                  value={guestLimitDraft}
+                  onChange={(e) => setGuestLimitDraft(e.target.value)}
+                />
+                <p className="hint" style={{ marginTop: '0.4rem', marginBottom: 0 }}>
+                  Currently {thisWeekSeatCount} seat
+                  {thisWeekSeatCount === 1 ? '' : 's'} filled
+                  {guestLimitDraft.trim()
+                    ? ` of ${guestLimitDraft.trim()}`
+                    : ''}
+                  .
+                </p>
+              </div>
+              {settingsMsg && <div className="banner banner-ok">{settingsMsg}</div>}
+              <div className="actions">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingSettings}
+                >
+                  {savingSettings ? 'Saving…' : 'Save limit'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={savingSettings || guestLimitDraft === ''}
+                  onClick={async () => {
+                    setGuestLimitDraft('')
+                    setSavingSettings(true)
+                    setSettingsMsg('')
+                    setError('')
+                    try {
+                      await updateAdminSettings({
+                        week_start: week,
+                        guest_limit: null,
+                      })
+                      setSettingsMsg('No guest limit this week — RSVPs are open.')
+                    } catch (err) {
+                      setError(err.message || 'Could not save settings')
+                    } finally {
+                      setSavingSettings(false)
+                    }
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </form>
+          </div>
 
           {view === 'sheet' && (
             <>

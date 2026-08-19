@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import FoodSectionCard from '../components/FoodSectionCard'
 import PastPeopleList from '../components/PastPeopleList'
 import PersonAvatar from '../components/PersonAvatar'
-import { comingLabel, findMyRsvpThisWeek, getWeekRsvps } from '../lib/api'
+import { comingLabel, findMyRsvpThisWeek, getWeekCapacity, getWeekRsvps } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
 import {
   comingOptionLabel,
@@ -53,6 +53,7 @@ export default function BoardPage({ defaultTab = 'coming' }) {
   const [tab, setTab] = useState(() =>
     tabFromPath(location.pathname, defaultTab),
   )
+  const [capacity, setCapacity] = useState(null)
   const [myIdentity, setMyIdentity] = useState(() => {
     const saved = loadFoodIdentity()
     const r = loadRememberedForm()
@@ -87,8 +88,14 @@ export default function BoardPage({ defaultTab = 'coming' }) {
     let cancelled = false
     ;(async () => {
       try {
-        const rows = await getWeekRsvps(week)
-        if (!cancelled) setRsvps(rows)
+        const [rows, cap] = await Promise.all([
+          getWeekRsvps(week),
+          getWeekCapacity(week),
+        ])
+        if (!cancelled) {
+          setRsvps(rows)
+          setCapacity(cap)
+        }
       } catch (e) {
         if (!cancelled) setError(e.message || 'Failed to load')
       } finally {
@@ -274,6 +281,16 @@ export default function BoardPage({ defaultTab = 'coming' }) {
             <span className="n">{stats.dishes.length}</span>
             <span className="l">Dishes listed</span>
           </div>
+          {capacity?.guest_limit != null && (
+            <div className="stat">
+              <span className="n">
+                {capacity.seat_count}/{capacity.guest_limit}
+              </span>
+              <span className="l">
+                {(capacity.spots_left ?? 0) <= 0 ? 'Week is full' : 'Seats filled'}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

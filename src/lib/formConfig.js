@@ -166,6 +166,21 @@ export const ATTENDING_VALUES = new Set([
   'help',
 ])
 
+/** Meal seats for guest-limit (excludes “no” and setup-only help). */
+export const MEAL_SEAT_VALUES = new Set([
+  'yes',
+  'yes_guest',
+  'yes_new',
+  'probably',
+  'social',
+  'unsure',
+])
+
+export function seatsForRsvp(rsvp) {
+  if (!MEAL_SEAT_VALUES.has(rsvp?.coming)) return 0
+  return 1 + (Number(rsvp.guest_count) || 0)
+}
+
 export function emptyForm() {
   return {
     fullName: '',

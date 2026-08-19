@@ -4,6 +4,7 @@ import {
   emptyForm,
   mealStartLabel,
   mealStyleLabel,
+  seatsForRsvp,
 } from './formConfig'
 import { adminUnlockUrl, isSupabaseConfigured, supabase } from './supabase'
 import { currentSunday, previousSunday } from './week'
@@ -32,11 +33,14 @@ function uid() {
 function loadLocal() {
   try {
     const raw = localStorage.getItem(LS_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      return { people: [], rsvps: [], sponsorships: [], week_settings: {}, ...parsed }
+    }
   } catch {
     /* ignore */
   }
-  return { people: [], rsvps: [], sponsorships: [] }
+  return { people: [], rsvps: [], sponsorships: [], week_settings: {} }
 }
 
 function saveLocal(data) {
@@ -235,6 +239,28 @@ async function submitLocal(form) {
   const weekStart = currentSunday()
   const person = await upsertPersonLocal(form)
   const data = loadLocal()
+  const nextSeats = seatsForRsvp({
+    coming: form.coming,
+    guest_count:
+      form.guestCount === '' || form.guestCount == null
+        ? null
+        : Number(form.guestCount),
+  })
+  const cap = weekCapacityFromData(data, weekStart)
+  const usedWithoutMe = (data.rsvps || [])
+    .filter(
+      (r) =>
+        r.week_start === weekStart && r.person_id !== person.id,
+    )
+    .reduce((n, r) => n + seatsForRsvp(r), 0)
+  if (cap.guest_limit != null && nextSeats > 0 && usedWithoutMe + nextSeats > cap.guest_limit) {
+    const left = Math.max(0, cap.guest_limit - usedWithoutMe)
+    throw new Error(
+      left === 0
+        ? `This week is full (${cap.guest_limit} people). Ask the host if a spot opens.`
+        : `Only ${left} spot${left === 1 ? '' : 's'} left this week (limit ${cap.guest_limit}).`,
+    )
+  }
 
   const oldIds = data.rsvps
     .filter((r) => r.person_id === person.id && r.week_start === weekStart)
@@ -658,6 +684,66 @@ export async function getSponsorships() {
     sponsorships: await getSponsorshipsLocal(),
     people: data.people,
     rsvps: data.rsvps,
+    week_settings: data.week_settings || {},
+    capacity: weekCapacityFromData(data, currentSunday()),
+  }
+}
+
+function weekCapacityFromData(data, weekStart) {
+  const guest_limit = data.week_settings?.[weekStart]?.guest_limit ?? null
+  const seat_count = (data.rsvps || [])
+    .filter((r) => r.week_start === weekStart)
+    .reduce((n, r) => n + seatsForRsvp(r), 0)
+  return {
+    week_start: weekStart,
+    guest_limit,
+    seat_count,
+    spots_left:
+      guest_limit == null ? null : Math.max(0, Number(guest_limit) - seat_count),
+  }
+}
+
+export async function getWeekCapacity(weekStart = currentSunday()) {
+  if (API_URL) {
+    const data = await api(`/rsvps?week=${encodeURIComponent(weekStart)}`)
+    return {
+      week_start: data.week_start || weekStart,
+      guest_limit: data.guest_limit ?? null,
+      seat_count: data.seat_count ?? 0,
+      spots_left: data.spots_left ?? null,
+    }
+  }
+  return weekCapacityFromData(loadLocal(), weekStart)
+}
+
+export async function updateAdminSettings(patch) {
+  const token = getAdminSession()
+  if (!token) throw new Error('Not unlocked')
+  const week = patch.week_start || patch.weekStart || currentSunday()
+  if (API_URL) {
+    return api('/admin/settings', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ...patch, week_start: week }),
+    })
+  }
+  const data = loadLocal()
+  data.week_settings = data.week_settings || {}
+  const prev = data.week_settings[week] || {}
+  if (patch.guest_limit !== undefined || patch.guestLimit !== undefined) {
+    const raw = patch.guest_limit ?? patch.guestLimit
+    prev.guest_limit =
+      raw === '' || raw === null || raw === undefined ? null : Number(raw)
+    if (!Number.isFinite(prev.guest_limit) || prev.guest_limit < 1) {
+      prev.guest_limit = null
+    }
+  }
+  data.week_settings[week] = prev
+  saveLocal(data)
+  return {
+    week_start: week,
+    settings: prev,
+    capacity: weekCapacityFromData(data, week),
   }
 }
 

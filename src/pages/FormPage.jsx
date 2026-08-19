@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { comingLabel, findMyRsvpLastWeek, findMyRsvpThisWeek, submitRsvp } from '../lib/api'
+import { comingLabel, findMyRsvpLastWeek, findMyRsvpThisWeek, getWeekCapacity, submitRsvp } from '../lib/api'
 import {
   COMING_OPTIONS,
   FEEDBACK_OPTIONS,
@@ -262,8 +262,24 @@ export default function FormPage() {
   const [existing, setExisting] = useState(null)
   const [lastWeek, setLastWeek] = useState(null)
   const [submittedPersonId, setSubmittedPersonId] = useState(null)
+  const [capacity, setCapacity] = useState(null)
   const remembered =
     Boolean(form.fullName?.trim()) || Boolean(form.phone?.trim())
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const cap = await getWeekCapacity()
+        if (!cancelled) setCapacity(cap)
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -594,6 +610,19 @@ export default function FormPage() {
       </section>
 
       {error && <div className="banner banner-err">{error}</div>}
+
+      {capacity?.guest_limit != null && (
+        <div
+          className={`banner ${
+            (capacity.spots_left ?? 0) <= 0 ? 'banner-err' : 'banner-ok'
+          }`}
+          style={{ marginBottom: '1rem' }}
+        >
+          {(capacity.spots_left ?? 0) <= 0
+            ? `This week is a smaller Shabbos — the ${capacity.guest_limit}-person cap is full. You can still RSVP no / help, or ask the host.`
+            : `Smaller Shabbos this week: ${capacity.seat_count} of ${capacity.guest_limit} seats filled (${capacity.spots_left} left).`}
+        </div>
+      )}
 
       {step === STEPS.returning && (
         <div className="panel">
