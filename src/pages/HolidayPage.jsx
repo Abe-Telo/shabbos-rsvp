@@ -154,6 +154,24 @@ export default function HolidayPage() {
     }))
   }
 
+  function copyGuestsFromMeal(fromMealId, { belowOnly = false } = {}) {
+    const source = guestByMeal[fromMealId] || { count: '', names: '' }
+    const fromIdx = hostedMeals.findIndex((m) => m.id === fromMealId)
+    if (fromIdx < 0) return
+    setGuestByMeal((prev) => {
+      const next = { ...prev }
+      hostedMeals.forEach((m, idx) => {
+        if (m.id === fromMealId) return
+        if (belowOnly && idx <= fromIdx) return
+        next[m.id] = {
+          count: source.count ?? '',
+          names: source.names ?? '',
+        }
+      })
+      return next
+    })
+  }
+
   function guestsPayload() {
     if (bringingGuests !== 'Yes') return []
     return hostedMeals
@@ -370,11 +388,36 @@ export default function HolidayPage() {
           </div>
           {bringingGuests === 'Yes' && (
             <div className="holiday-guest-meals">
-              {hostedMeals.map((m) => {
+              {hostedMeals[0] && (
+                <div className="actions" style={{ marginBottom: '0.25rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-accent"
+                    onClick={() => copyGuestsFromMeal(hostedMeals[0].id)}
+                  >
+                    Copy first meal to all days
+                  </button>
+                </div>
+              )}
+              {hostedMeals.map((m, idx) => {
                 const g = guestByMeal[m.id] || { count: '', names: '' }
+                const hasBelow = idx < hostedMeals.length - 1
                 return (
                   <div className="holiday-guest-meal" key={m.id}>
-                    <strong>{formatMealLabel(m)}</strong>
+                    <div className="holiday-guest-meal-head">
+                      <strong>{formatMealLabel(m)}</strong>
+                      {hasBelow && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost holiday-copy-btn"
+                          onClick={() =>
+                            copyGuestsFromMeal(m.id, { belowOnly: true })
+                          }
+                        >
+                          Copy to all below
+                        </button>
+                      )}
+                    </div>
                     <div className="field" style={{ marginTop: '0.65rem' }}>
                       <label>How many guests?</label>
                       <input

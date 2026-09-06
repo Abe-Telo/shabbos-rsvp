@@ -564,6 +564,20 @@ select {
   border: 1px solid rgba(26, 36, 28, 0.1);
 }
 
+.holiday-guest-meal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.holiday-copy-btn {
+  font-size: 0.82rem;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+
 .person-name-link {
   color: inherit;
   text-decoration: none;
