@@ -767,6 +767,42 @@ function holidaySeatSummary(db, holidayId) {
     enabled: event.enabled,
     meals: Object.values(byMeal),
     rsvp_count: rows.length,
+    people: rows.map((r) => {
+      const guestByMeal = {}
+      for (const g of r.guests || []) {
+        const count = Math.max(0, Number(g.count) || 0)
+        for (const mid of g.meals || []) {
+          guestByMeal[mid] = (guestByMeal[mid] || 0) + count
+        }
+      }
+      const guestCounts = Object.values(guestByMeal)
+      const guests = guestCounts.length ? Math.max(...guestCounts) : 0
+      return {
+        id: r.id,
+        name: r.full_name,
+        number: 1,
+        guests,
+        total: 1 + guests,
+        meals: r.meals || [],
+        guest_details: r.guests || [],
+        help: r.help || null,
+      }
+    }),
+    totals: {
+      number: rows.length,
+      guests: rows.reduce((n, r) => {
+        const guestByMeal = {}
+        for (const g of r.guests || []) {
+          const count = Math.max(0, Number(g.count) || 0)
+          for (const mid of g.meals || []) {
+            guestByMeal[mid] = (guestByMeal[mid] || 0) + count
+          }
+        }
+        const vals = Object.values(guestByMeal)
+        return n + (vals.length ? Math.max(...vals) : 0)
+      }, 0),
+      total: 0,
+    },
   }
 }
 
@@ -774,6 +810,25 @@ function publicHolidayRsvp(row) {
   if (!row) return null
   const { phone, ...rest } = row
   return rest
+}
+
+function holidayFoodFor(db, holidayId, mealId) {
+  return (db.holiday_food_items || [])
+    .filter(
+      (it) =>
+        it.holiday_id === holidayId &&
+        (!mealId || it.meal_id === mealId),
+    )
+    .sort((a, b) => {
+      const byName = String(a.item_name || '').localeCompare(
+        String(b.item_name || ''),
+        undefined,
+        { sensitivity: 'base' },
+      )
+      if (byName !== 0) return byName
+      return String(a.created_at || '').localeCompare(String(b.created_at || ''))
+    })
+    .map(({ phone, ...rest }) => rest)
 }
 
 app.get('/holiday', (_req, res) => {
@@ -784,10 +839,12 @@ app.get('/holiday', (_req, res) => {
 app.get('/holiday/rsvps', (_req, res) => {
   const db = loadDb()
   const event = normalizeHolidayEvent(db.holiday_event)
+  const summary = holidaySeatSummary(db, event.holiday_id)
+  summary.totals.total = summary.totals.number + summary.totals.guests
   if (!event.enabled) {
     return res.json({
       enabled: false,
-      summary: holidaySeatSummary(db, event.holiday_id),
+      summary,
       rsvps: [],
     })
   }
@@ -797,9 +854,114 @@ app.get('/holiday/rsvps', (_req, res) => {
     .map(publicHolidayRsvp)
   res.json({
     enabled: true,
-    summary: holidaySeatSummary(db, event.holiday_id),
+    summary,
     rsvps: rows,
   })
+})
+
+app.get('/holiday/food', (req, res) => {
+  const db = loadDb()
+  const event = normalizeHolidayEvent(db.holiday_event)
+  const mealId = req.query.meal ? String(req.query.meal) : null
+  res.json({
+    enabled: event.enabled,
+    holiday_id: event.holiday_id,
+    meal_id: mealId,
+    items: event.holiday_id
+      ? holidayFoodFor(db, event.holiday_id, mealId)
+      : [],
+  })
+})
+
+app.post('/holiday/food', (req, res) => {
+  try {
+    const body = req.body || {}
+    const itemName = String(body.item_name || body.itemName || '').trim()
+    const coveredBy = String(body.covered_by || body.coveredBy || '').trim()
+    const mealId = String(body.meal_id || body.mealId || '').trim()
+    if (!itemName) return res.status(400).json({ error: 'Item name is required' })
+    if (!mealId) return res.status(400).json({ error: 'Meal is required' })
+    const db = loadDb()
+    const event = normalizeHolidayEvent(db.holiday_event)
+    if (!event.enabled || !event.holiday_id) {
+      return res.status(400).json({ error: 'Holiday RSVP is not open' })
+    }
+    const hosted = event.meals.some((m) => m.id === mealId && m.hosted)
+    if (!hosted) return res.status(400).json({ error: 'Unknown meal' })
+
+    db.holiday_food_items = db.holiday_food_items || []
+    // If same item already exists for meal (case-insensitive), claim/update it
+    const existing = db.holiday_food_items.find(
+      (it) =>
+        it.holiday_id === event.holiday_id &&
+        it.meal_id === mealId &&
+        String(it.item_name || '').toLowerCase() === itemName.toLowerCase(),
+    )
+    if (existing) {
+      if (coveredBy) existing.covered_by = coveredBy
+      if (body.phone !== undefined) existing.phone = String(body.phone || '').trim() || null
+      if (body.notes !== undefined) {
+        existing.notes = String(body.notes || '').trim() || null
+      }
+      saveDb(db)
+      const { phone, ...pub } = existing
+      return res.json({ item: pub, items: holidayFoodFor(db, event.holiday_id, mealId) })
+    }
+
+    const item = {
+      id: uuid(),
+      holiday_id: event.holiday_id,
+      meal_id: mealId,
+      item_name: itemName,
+      covered_by: coveredBy || null,
+      phone: String(body.phone || '').trim() || null,
+      notes: String(body.notes || '').trim() || null,
+      created_at: new Date().toISOString(),
+    }
+    db.holiday_food_items.push(item)
+    saveDb(db)
+    const { phone, ...pub } = item
+    res.json({ item: pub, items: holidayFoodFor(db, event.holiday_id, mealId) })
+  } catch (e) {
+    console.error(e)
+    res.status(400).json({ error: e.message || 'Could not save food item' })
+  }
+})
+
+app.patch('/holiday/food/:id', (req, res) => {
+  try {
+    const db = loadDb()
+    const item = (db.holiday_food_items || []).find((it) => it.id === req.params.id)
+    if (!item) return res.status(404).json({ error: 'Item not found' })
+    const body = req.body || {}
+    if (body.item_name !== undefined || body.itemName !== undefined) {
+      item.item_name =
+        String(body.item_name ?? body.itemName ?? '').trim() || item.item_name
+    }
+    if (body.covered_by !== undefined || body.coveredBy !== undefined) {
+      item.covered_by =
+        String(body.covered_by ?? body.coveredBy ?? '').trim() || null
+    }
+    if (body.phone !== undefined) {
+      item.phone = String(body.phone || '').trim() || null
+    }
+    if (body.notes !== undefined) {
+      item.notes = String(body.notes || '').trim() || null
+    }
+    if (body.clear_cover || body.clearCover) {
+      item.covered_by = null
+      item.phone = null
+    }
+    saveDb(db)
+    const { phone, ...pub } = item
+    res.json({
+      item: pub,
+      items: holidayFoodFor(db, item.holiday_id, item.meal_id),
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(400).json({ error: e.message || 'Update failed' })
+  }
 })
 
 app.post('/holiday/rsvps', (req, res) => {

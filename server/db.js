@@ -28,6 +28,7 @@ function empty() {
       meals: [],
     },
     holiday_rsvps: [],
+    holiday_food_items: [],
   }
 }
 
@@ -48,6 +49,9 @@ export function loadDb() {
         },
         holiday_rsvps: Array.isArray(parsed.holiday_rsvps)
           ? parsed.holiday_rsvps
+          : [],
+        holiday_food_items: Array.isArray(parsed.holiday_food_items)
+          ? parsed.holiday_food_items
           : [],
       }
     }

@@ -53,6 +53,7 @@ function loadLocal() {
       meals: [],
     },
     holiday_rsvps: [],
+    holiday_food_items: [],
   }
 }
 
@@ -1050,6 +1051,42 @@ function holidaySummaryLocal(data) {
     enabled: event.enabled,
     meals: Object.values(byMeal),
     rsvp_count: rows.length,
+    people: rows.map((r) => {
+      const guestByMeal = {}
+      for (const g of r.guests || []) {
+        const count = Math.max(0, Number(g.count) || 0)
+        for (const mid of g.meals || []) {
+          guestByMeal[mid] = (guestByMeal[mid] || 0) + count
+        }
+      }
+      const vals = Object.values(guestByMeal)
+      const guests = vals.length ? Math.max(...vals) : 0
+      return {
+        id: r.id,
+        name: r.full_name,
+        number: 1,
+        guests,
+        total: 1 + guests,
+        meals: r.meals || [],
+        guest_details: r.guests || [],
+        help: r.help || null,
+      }
+    }),
+    totals: (() => {
+      const number = rows.length
+      const guests = rows.reduce((n, r) => {
+        const guestByMeal = {}
+        for (const g of r.guests || []) {
+          const count = Math.max(0, Number(g.count) || 0)
+          for (const mid of g.meals || []) {
+            guestByMeal[mid] = (guestByMeal[mid] || 0) + count
+          }
+        }
+        const vals = Object.values(guestByMeal)
+        return n + (vals.length ? Math.max(...vals) : 0)
+      }, 0)
+      return { number, guests, total: number + guests }
+    })(),
   }
 }
 
@@ -1173,4 +1210,100 @@ export async function updateAdminHoliday(patch) {
   data.holiday_event = next
   saveLocal(data)
   return { holiday: next, summary: holidaySummaryLocal(data) }
+}
+
+export async function getHolidayFood(mealId) {
+  if (API_URL) {
+    const q = mealId ? `?meal=${encodeURIComponent(mealId)}` : ''
+    return api(`/holiday/food${q}`)
+  }
+  const data = loadLocal()
+  const event = normalizeHolidayEventLocal(data.holiday_event)
+  const items = (data.holiday_food_items || [])
+    .filter(
+      (it) =>
+        it.holiday_id === event.holiday_id &&
+        (!mealId || it.meal_id === mealId),
+    )
+    .map(({ phone, ...rest }) => rest)
+  return {
+    enabled: event.enabled,
+    holiday_id: event.holiday_id,
+    meal_id: mealId || null,
+    items,
+  }
+}
+
+export async function saveHolidayFoodItem(payload) {
+  if (API_URL) {
+    return api('/holiday/food', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  }
+  const data = loadLocal()
+  const event = normalizeHolidayEventLocal(data.holiday_event)
+  if (!event.enabled) throw new Error('Holiday RSVP is not open')
+  const mealId = payload.meal_id || payload.mealId
+  const itemName = String(payload.item_name || payload.itemName || '').trim()
+  const coveredBy = String(payload.covered_by || payload.coveredBy || '').trim()
+  data.holiday_food_items = data.holiday_food_items || []
+  let existing = data.holiday_food_items.find(
+    (it) =>
+      it.holiday_id === event.holiday_id &&
+      it.meal_id === mealId &&
+      String(it.item_name || '').toLowerCase() === itemName.toLowerCase(),
+  )
+  if (existing) {
+    if (coveredBy) existing.covered_by = coveredBy
+  } else {
+    existing = {
+      id: uid(),
+      holiday_id: event.holiday_id,
+      meal_id: mealId,
+      item_name: itemName,
+      covered_by: coveredBy || null,
+      phone: payload.phone || null,
+      notes: payload.notes || null,
+      created_at: new Date().toISOString(),
+    }
+    data.holiday_food_items.push(existing)
+  }
+  saveLocal(data)
+  const items = (data.holiday_food_items || [])
+    .filter((it) => it.holiday_id === event.holiday_id && it.meal_id === mealId)
+    .map(({ phone, ...rest }) => rest)
+  const { phone, ...pub } = existing
+  return { item: pub, items }
+}
+
+export async function updateHolidayFoodItem(id, patch) {
+  if (API_URL) {
+    return api(`/holiday/food/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+  const data = loadLocal()
+  const item = (data.holiday_food_items || []).find((it) => it.id === id)
+  if (!item) throw new Error('Item not found')
+  if (patch.clear_cover || patch.clearCover) {
+    item.covered_by = null
+    item.phone = null
+  } else {
+    if (patch.covered_by !== undefined || patch.coveredBy !== undefined) {
+      item.covered_by = String(patch.covered_by ?? patch.coveredBy ?? '').trim() || null
+    }
+    if (patch.item_name !== undefined || patch.itemName !== undefined) {
+      item.item_name = String(patch.item_name ?? patch.itemName ?? '').trim() || item.item_name
+    }
+  }
+  saveLocal(data)
+  const items = (data.holiday_food_items || [])
+    .filter(
+      (it) => it.holiday_id === item.holiday_id && it.meal_id === item.meal_id,
+    )
+    .map(({ phone, ...rest }) => rest)
+  const { phone, ...pub } = item
+  return { item: pub, items }
 }
