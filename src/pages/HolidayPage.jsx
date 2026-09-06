@@ -20,21 +20,16 @@ const STEPS = {
 }
 
 function PaymentBlock() {
+  const zelle = HOST_PAYMENT.zelle || 'Abe@bigtechservices.com'
   return (
     <div className="holiday-pay">
-      <strong>Send a donation here</strong>
-      <p className="hint" style={{ marginBottom: '0.5rem' }}>
-        {HOST_PAYMENT.note}
+      <strong>Send your donation by Zelle</strong>
+      <div className="meta" style={{ marginTop: '0.35rem', fontSize: '1.05rem' }}>
+        {zelle}
+      </div>
+      <p className="hint" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
+        Please include your name in the Zelle memo. Thank you!
       </p>
-      {HOST_PAYMENT.zelle && (
-        <div className="meta">Zelle: {HOST_PAYMENT.zelle}</div>
-      )}
-      {HOST_PAYMENT.venmo && (
-        <div className="meta">Venmo: {HOST_PAYMENT.venmo}</div>
-      )}
-      {HOST_PAYMENT.paypal && (
-        <div className="meta">PayPal: {HOST_PAYMENT.paypal}</div>
-      )}
     </div>
   )
 }
@@ -98,6 +93,7 @@ export default function HolidayPage() {
     donate: false,
     potluck: false,
     clean: false,
+    amount: '',
     notes: '',
   })
 
@@ -239,6 +235,10 @@ export default function HolidayPage() {
   }
 
   async function finish() {
+    if (help.donate && !String(help.amount || '').trim()) {
+      setError('Please enter how much you can donate.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -247,7 +247,10 @@ export default function HolidayPage() {
         phone: phone.trim(),
         meals: selectedMeals,
         guests: guestsPayload(),
-        help,
+        help: {
+          ...help,
+          amount: String(help.amount || '').trim(),
+        },
       })
       saveRememberedForm({
         ...remembered,
@@ -487,7 +490,11 @@ export default function HolidayPage() {
                   type="checkbox"
                   checked={help.donate}
                   onChange={(e) =>
-                    setHelp((h) => ({ ...h, donate: e.target.checked }))
+                    setHelp((h) => ({
+                      ...h,
+                      donate: e.target.checked,
+                      amount: e.target.checked ? h.amount : '',
+                    }))
                   }
                 />
                 <span>I can donate / contribute money</span>
@@ -514,7 +521,23 @@ export default function HolidayPage() {
               </label>
             </div>
           </div>
-          {help.donate && <PaymentBlock />}
+          {help.donate && (
+            <div className="field">
+              <label>
+                How much can you donate? <span className="req">*</span>
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={help.amount}
+                onChange={(e) =>
+                  setHelp((h) => ({ ...h, amount: e.target.value }))
+                }
+                placeholder="e.g. $36"
+              />
+            </div>
+          )}
+          {help.donate && String(help.amount || '').trim() && <PaymentBlock />}
           <div className="field">
             <label>Notes (optional)</label>
             <textarea
@@ -522,7 +545,7 @@ export default function HolidayPage() {
               onChange={(e) =>
                 setHelp((h) => ({ ...h, notes: e.target.value }))
               }
-              placeholder="What you might bring, amount, timing…"
+              placeholder="What you might bring, timing…"
             />
           </div>
           <div className="actions">
@@ -584,6 +607,7 @@ export default function HolidayPage() {
                   donate: false,
                   potluck: false,
                   clean: false,
+                  amount: '',
                   notes: '',
                 })
                 setAddresses([])

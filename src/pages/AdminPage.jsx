@@ -686,6 +686,7 @@ export default function AdminPage() {
       'guest_count',
       'guest_meals',
       'donate',
+      'donate_amount',
       'potluck',
       'clean',
       'help_notes',
@@ -708,6 +709,7 @@ export default function AdminPage() {
             .map((g) => `${(g.meals || []).join('/')}:×${g.count}`)
             .join('; '),
           r.help?.donate ? 'yes' : '',
+          r.help?.amount || '',
           r.help?.potluck ? 'yes' : '',
           r.help?.clean ? 'yes' : '',
           r.help?.notes || '',
@@ -1239,7 +1241,11 @@ export default function AdminPage() {
                         </div>
                       )}
                       <div className="tags">
-                        {r.help?.donate && <span className="tag">Donate</span>}
+                        {r.help?.donate && (
+                          <span className="tag">
+                            Donate{r.help?.amount ? ` ${r.help.amount}` : ''}
+                          </span>
+                        )}
                         {r.help?.potluck && <span className="tag">Potluck</span>}
                         {r.help?.clean && <span className="tag">Clean</span>}
                       </div>

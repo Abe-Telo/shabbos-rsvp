@@ -1130,6 +1130,7 @@ export async function submitHolidayRsvp(form) {
       donate: Boolean(form.help?.donate),
       potluck: Boolean(form.help?.potluck),
       clean: Boolean(form.help?.clean),
+      amount: String(form.help?.amount || '').trim() || null,
       notes: String(form.help?.notes || '').trim() || null,
     },
     created_at: new Date().toISOString(),

@@ -840,6 +840,7 @@ app.post('/holiday/rsvps', (req, res) => {
       donate: Boolean(helpRaw.donate),
       potluck: Boolean(helpRaw.potluck),
       clean: Boolean(helpRaw.clean),
+      amount: String(helpRaw.amount || '').trim() || null,
       notes: String(helpRaw.notes || '').trim() || null,
     }
 
