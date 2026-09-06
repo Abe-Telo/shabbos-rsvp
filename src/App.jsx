@@ -4,6 +4,7 @@ import { AuthProvider } from './lib/AuthContext'
 import AdminPage from './pages/AdminPage'
 import BoardPage from './pages/BoardPage'
 import FormPage from './pages/FormPage'
+import HolidayPage from './pages/HolidayPage'
 import ProfilePage from './pages/ProfilePage'
 import PublicProfilePage from './pages/PublicProfilePage'
 
@@ -17,6 +18,7 @@ export default function App() {
             <Route path="board" element={<BoardPage />} />
             <Route path="food" element={<BoardPage defaultTab="food" />} />
             <Route path="food-history" element={<BoardPage defaultTab="pastfood" />} />
+            <Route path="holiday" element={<HolidayPage />} />
             <Route path="people" element={<BoardPage defaultTab="past" />} />
             <Route path="sheet" element={<BoardPage defaultTab="sheet" />} />
             <Route path="profile" element={<ProfilePage />} />

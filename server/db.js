@@ -20,6 +20,14 @@ function empty() {
     users: [],
     user_sessions: [],
     week_settings: {},
+    holiday_event: {
+      enabled: false,
+      holiday_id: null,
+      title: '',
+      statement: '',
+      meals: [],
+    },
+    holiday_rsvps: [],
   }
 }
 
@@ -31,6 +39,16 @@ export function loadDb() {
         ...empty(),
         ...parsed,
         week_settings: parsed.week_settings || {},
+        holiday_event: {
+          ...empty().holiday_event,
+          ...(parsed.holiday_event || {}),
+          meals: Array.isArray(parsed.holiday_event?.meals)
+            ? parsed.holiday_event.meals
+            : [],
+        },
+        holiday_rsvps: Array.isArray(parsed.holiday_rsvps)
+          ? parsed.holiday_rsvps
+          : [],
       }
     }
   } catch (e) {

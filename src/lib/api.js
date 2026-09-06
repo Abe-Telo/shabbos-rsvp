@@ -40,7 +40,20 @@ function loadLocal() {
   } catch {
     /* ignore */
   }
-  return { people: [], rsvps: [], sponsorships: [], week_settings: {} }
+  return {
+    people: [],
+    rsvps: [],
+    sponsorships: [],
+    week_settings: {},
+    holiday_event: {
+      enabled: false,
+      holiday_id: null,
+      title: '',
+      statement: '',
+      meals: [],
+    },
+    holiday_rsvps: [],
+  }
 }
 
 function saveLocal(data) {
@@ -767,6 +780,10 @@ export async function getSponsorships() {
     rsvps: data.rsvps,
     week_settings: data.week_settings || {},
     capacity: weekCapacityFromData(data, currentSunday()),
+    holiday_event: normalizeHolidayEventLocal(data.holiday_event),
+    holiday_rsvps: [...(data.holiday_rsvps || [])].sort((a, b) =>
+      a.created_at < b.created_at ? 1 : -1,
+    ),
   }
 }
 
@@ -943,4 +960,216 @@ export async function updateRsvpFood(id, patch) {
 
 export function comingLabel(value) {
   return comingOptionLabel(value) || value
+}
+
+const DEFAULT_HOLIDAY_STATEMENT =
+  'Yom Tov meals take a lot of time and money to prepare. Please help however you can — a donation, bringing a potluck dish, or helping clean up after the meal. Every bit makes hosting possible.'
+
+function normalizeHolidayEventLocal(raw) {
+  const base = {
+    enabled: false,
+    holiday_id: null,
+    title: '',
+    statement: DEFAULT_HOLIDAY_STATEMENT,
+    meals: [],
+  }
+  if (!raw || typeof raw !== 'object') return base
+  return {
+    enabled: Boolean(raw.enabled),
+    holiday_id: raw.holiday_id || raw.holidayId || null,
+    title: String(raw.title || '').trim(),
+    statement: String(raw.statement || '').trim() || DEFAULT_HOLIDAY_STATEMENT,
+    meals: Array.isArray(raw.meals) ? raw.meals : [],
+  }
+}
+
+function holidayAddressesLocal(event, mealIds) {
+  const want = new Set((mealIds || []).map(String))
+  return (event.meals || [])
+    .filter((m) => want.has(m.id) && m.hosted !== false)
+    .map((m) => ({
+      id: m.id,
+      label: m.label,
+      date: m.date,
+      period: m.period,
+      date_label: m.date_label,
+      host_name: m.host_name || null,
+      address: m.address || null,
+      notes: m.notes || null,
+    }))
+    .filter((m) => m.host_name || m.address || m.notes)
+}
+
+function holidaySummaryLocal(data) {
+  const event = normalizeHolidayEventLocal(data.holiday_event)
+  const rows = (data.holiday_rsvps || []).filter(
+    (r) => r.holiday_id === event.holiday_id,
+  )
+  const byMeal = {}
+  for (const m of (event.meals || []).filter((x) => x.hosted !== false)) {
+    byMeal[m.id] = {
+      meal_id: m.id,
+      label: m.label,
+      date: m.date,
+      period: m.period,
+      date_label: m.date_label,
+      self_count: 0,
+      guest_count: 0,
+      total: 0,
+      people: [],
+    }
+  }
+  for (const r of rows) {
+    for (const mid of r.meals || []) {
+      const bucket = byMeal[mid]
+      if (!bucket) continue
+      bucket.self_count += 1
+      bucket.total += 1
+      bucket.people.push({ name: r.full_name, kind: 'self', guests: 0 })
+    }
+    for (const g of r.guests || []) {
+      const count = Math.max(0, Number(g.count) || 0)
+      if (!count) continue
+      for (const mid of g.meals || []) {
+        const bucket = byMeal[mid]
+        if (!bucket) continue
+        bucket.guest_count += count
+        bucket.total += count
+        bucket.people.push({
+          name: g.name || 'Guest',
+          kind: 'guest',
+          guests: count,
+          with: r.full_name,
+        })
+      }
+    }
+  }
+  return {
+    holiday_id: event.holiday_id,
+    title: event.title,
+    enabled: event.enabled,
+    meals: Object.values(byMeal),
+    rsvp_count: rows.length,
+  }
+}
+
+export async function getHolidayEvent() {
+  if (API_URL) {
+    const data = await api('/holiday')
+    return data.holiday
+  }
+  const data = loadLocal()
+  const event = normalizeHolidayEventLocal(data.holiday_event)
+  return {
+    ...event,
+    meals: (event.meals || [])
+      .filter((m) => m.hosted !== false)
+      .map(({ address, ...rest }) => rest),
+  }
+}
+
+export async function getHolidayRsvps() {
+  if (API_URL) return api('/holiday/rsvps')
+  const data = loadLocal()
+  const event = normalizeHolidayEventLocal(data.holiday_event)
+  const rows = (data.holiday_rsvps || [])
+    .filter((r) => r.holiday_id === event.holiday_id)
+    .map(({ phone, ...rest }) => rest)
+  return {
+    enabled: event.enabled,
+    summary: holidaySummaryLocal(data),
+    rsvps: rows,
+  }
+}
+
+export async function submitHolidayRsvp(form) {
+  if (API_URL) {
+    return api('/holiday/rsvps', {
+      method: 'POST',
+      body: JSON.stringify(form),
+    })
+  }
+  const data = loadLocal()
+  const event = normalizeHolidayEventLocal(data.holiday_event)
+  if (!event.enabled) throw new Error('Holiday RSVP is not open right now')
+  const hostedIds = new Set(
+    (event.meals || []).filter((m) => m.hosted !== false).map((m) => m.id),
+  )
+  const meals = (form.meals || []).map(String).filter((id) => hostedIds.has(id))
+  if (!meals.length) throw new Error('Select at least one meal')
+  const person = await upsertPersonLocal({
+    fullName: form.fullName,
+    phone: form.phone,
+    coming: 'yes',
+    foodLikes: [],
+  })
+  const guests = (form.guests || [])
+    .map((g) => ({
+      name: String(g.name || '').trim(),
+      count: Math.max(0, Number(g.count) || 0),
+      meals: (g.meals || []).map(String).filter((id) => hostedIds.has(id)),
+    }))
+    .filter((g) => g.count > 0 && g.meals.length > 0)
+  data.holiday_rsvps = (data.holiday_rsvps || []).filter(
+    (r) =>
+      !(
+        r.holiday_id === event.holiday_id &&
+        (r.person_id === person.id ||
+          normalizePhone(r.phone) === normalizePhone(form.phone))
+      ),
+  )
+  const rsvp = {
+    id: uid(),
+    person_id: person.id,
+    holiday_id: event.holiday_id,
+    full_name: form.fullName.trim(),
+    phone: form.phone.trim(),
+    meals,
+    guests,
+    help: {
+      donate: Boolean(form.help?.donate),
+      potluck: Boolean(form.help?.potluck),
+      clean: Boolean(form.help?.clean),
+      notes: String(form.help?.notes || '').trim() || null,
+    },
+    created_at: new Date().toISOString(),
+  }
+  data.holiday_rsvps.push(rsvp)
+  saveLocal(data)
+  const allMealIds = [...meals, ...guests.flatMap((g) => g.meals)]
+  const { phone, ...publicRsvp } = rsvp
+  return {
+    rsvp: publicRsvp,
+    person: { id: person.id, name: person.name },
+    addresses: holidayAddressesLocal(event, allMealIds),
+    holiday: {
+      ...event,
+      meals: (event.meals || [])
+        .filter((m) => m.hosted !== false)
+        .map(({ address, ...rest }) => rest),
+    },
+  }
+}
+
+export async function updateAdminHoliday(patch) {
+  const token = getAdminSession()
+  if (!token) throw new Error('Not unlocked')
+  if (API_URL) {
+    return api('/admin/holiday', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patch),
+    })
+  }
+  const data = loadLocal()
+  const next = normalizeHolidayEventLocal({
+    ...normalizeHolidayEventLocal(data.holiday_event),
+    ...patch,
+    ...(patch.holiday || {}),
+  })
+  if (patch.enabled !== undefined) next.enabled = Boolean(patch.enabled)
+  if (Array.isArray(patch.meals)) next.meals = patch.meals
+  data.holiday_event = next
+  saveLocal(data)
+  return { holiday: next, summary: holidaySummaryLocal(data) }
 }

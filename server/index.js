@@ -647,6 +647,283 @@ app.get('/people', (_req, res) => {
   res.json({ people })
 })
 
+const DEFAULT_HOLIDAY_STATEMENT =
+  'Yom Tov meals take a lot of time and money to prepare. Please help however you can — a donation, bringing a potluck dish, or helping clean up after the meal. Every bit makes hosting possible.'
+
+function normalizeHolidayEvent(raw) {
+  const base = {
+    enabled: false,
+    holiday_id: null,
+    title: '',
+    statement: DEFAULT_HOLIDAY_STATEMENT,
+    meals: [],
+  }
+  if (!raw || typeof raw !== 'object') return base
+  const meals = Array.isArray(raw.meals)
+    ? raw.meals.map((m, i) => ({
+        id: String(m.id || `m${i + 1}`),
+        label: String(m.label || '').trim() || `Meal ${i + 1}`,
+        date: String(m.date || '').trim() || null,
+        period: m.period === 'day' ? 'day' : 'night',
+        hosted: m.hosted !== false,
+        host_name: String(m.host_name || m.hostName || '').trim(),
+        address: String(m.address || '').trim(),
+        notes: String(m.notes || '').trim(),
+        date_label: String(m.date_label || m.dateLabel || '').trim() || null,
+      }))
+    : []
+  return {
+    enabled: Boolean(raw.enabled),
+    holiday_id: raw.holiday_id || raw.holidayId || null,
+    title: String(raw.title || '').trim(),
+    statement:
+      String(raw.statement || '').trim() || DEFAULT_HOLIDAY_STATEMENT,
+    meals,
+  }
+}
+
+function publicHolidayEvent(event) {
+  const e = normalizeHolidayEvent(event)
+  return {
+    enabled: e.enabled,
+    holiday_id: e.holiday_id,
+    title: e.title,
+    statement: e.statement,
+    meals: e.meals
+      .filter((m) => m.hosted)
+      .map(({ address, ...rest }) => rest),
+  }
+}
+
+function mealAddressesForIds(event, mealIds) {
+  const e = normalizeHolidayEvent(event)
+  const want = new Set((mealIds || []).map(String))
+  return e.meals
+    .filter((m) => want.has(m.id) && m.hosted)
+    .map((m) => ({
+      id: m.id,
+      label: m.label,
+      date: m.date,
+      period: m.period,
+      date_label: m.date_label,
+      host_name: m.host_name || null,
+      address: m.address || null,
+      notes: m.notes || null,
+    }))
+    .filter((m) => m.host_name || m.address || m.notes)
+}
+
+function holidaySeatSummary(db, holidayId) {
+  const event = normalizeHolidayEvent(db.holiday_event)
+  const rows = (db.holiday_rsvps || []).filter(
+    (r) => !holidayId || r.holiday_id === holidayId,
+  )
+  const byMeal = {}
+  for (const m of event.meals.filter((x) => x.hosted)) {
+    byMeal[m.id] = {
+      meal_id: m.id,
+      label: m.label,
+      date: m.date,
+      period: m.period,
+      date_label: m.date_label,
+      self_count: 0,
+      guest_count: 0,
+      total: 0,
+      people: [],
+    }
+  }
+  for (const r of rows) {
+    for (const mid of r.meals || []) {
+      const bucket = byMeal[mid]
+      if (!bucket) continue
+      bucket.self_count += 1
+      bucket.total += 1
+      bucket.people.push({
+        name: r.full_name,
+        kind: 'self',
+        guests: 0,
+      })
+    }
+    for (const g of r.guests || []) {
+      const count = Math.max(0, Number(g.count) || 0)
+      if (!count) continue
+      for (const mid of g.meals || []) {
+        const bucket = byMeal[mid]
+        if (!bucket) continue
+        bucket.guest_count += count
+        bucket.total += count
+        bucket.people.push({
+          name: g.name || 'Guest',
+          kind: 'guest',
+          guests: count,
+          with: r.full_name,
+        })
+      }
+    }
+  }
+  return {
+    holiday_id: event.holiday_id,
+    title: event.title,
+    enabled: event.enabled,
+    meals: Object.values(byMeal),
+    rsvp_count: rows.length,
+  }
+}
+
+function publicHolidayRsvp(row) {
+  if (!row) return null
+  const { phone, ...rest } = row
+  return rest
+}
+
+app.get('/holiday', (_req, res) => {
+  const db = loadDb()
+  res.json({ holiday: publicHolidayEvent(db.holiday_event) })
+})
+
+app.get('/holiday/rsvps', (_req, res) => {
+  const db = loadDb()
+  const event = normalizeHolidayEvent(db.holiday_event)
+  if (!event.enabled) {
+    return res.json({
+      enabled: false,
+      summary: holidaySeatSummary(db, event.holiday_id),
+      rsvps: [],
+    })
+  }
+  const rows = (db.holiday_rsvps || [])
+    .filter((r) => r.holiday_id === event.holiday_id)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .map(publicHolidayRsvp)
+  res.json({
+    enabled: true,
+    summary: holidaySeatSummary(db, event.holiday_id),
+    rsvps: rows,
+  })
+})
+
+app.post('/holiday/rsvps', (req, res) => {
+  try {
+    const body = req.body || {}
+    const fullName = String(body.fullName || body.full_name || '').trim()
+    const phone = String(body.phone || '').trim()
+    if (!fullName || !phone) {
+      return res.status(400).json({ error: 'Name and phone are required' })
+    }
+    const db = loadDb()
+    const event = normalizeHolidayEvent(db.holiday_event)
+    if (!event.enabled) {
+      return res.status(400).json({ error: 'Holiday RSVP is not open right now' })
+    }
+    const hostedIds = new Set(event.meals.filter((m) => m.hosted).map((m) => m.id))
+    const meals = Array.isArray(body.meals)
+      ? [...new Set(body.meals.map(String))].filter((id) => hostedIds.has(id))
+      : []
+    if (!meals.length) {
+      return res.status(400).json({ error: 'Select at least one meal' })
+    }
+
+    const guests = Array.isArray(body.guests)
+      ? body.guests
+          .map((g) => ({
+            name: String(g.name || '').trim(),
+            count: Math.max(0, Number(g.count) || 0),
+            meals: Array.isArray(g.meals)
+              ? [...new Set(g.meals.map(String))].filter((id) => hostedIds.has(id))
+              : [],
+          }))
+          .filter((g) => g.count > 0 && g.meals.length > 0)
+      : []
+
+    const helpRaw = body.help || {}
+    const help = {
+      donate: Boolean(helpRaw.donate),
+      potluck: Boolean(helpRaw.potluck),
+      clean: Boolean(helpRaw.clean),
+      notes: String(helpRaw.notes || '').trim() || null,
+    }
+
+    const person = upsertPerson(db, {
+      fullName,
+      phone,
+      coming: 'yes',
+      weekStart: currentSunday(),
+      foodLikes: [],
+    })
+
+    db.holiday_rsvps = db.holiday_rsvps || []
+    const old = db.holiday_rsvps.filter(
+      (r) =>
+        r.holiday_id === event.holiday_id &&
+        (r.person_id === person.id || digits(r.phone) === digits(phone)),
+    )
+    const oldIds = new Set(old.map((r) => r.id))
+    db.holiday_rsvps = db.holiday_rsvps.filter((r) => !oldIds.has(r.id))
+
+    const allMealIds = [
+      ...meals,
+      ...guests.flatMap((g) => g.meals),
+    ]
+
+    const rsvp = {
+      id: uuid(),
+      person_id: person.id,
+      holiday_id: event.holiday_id,
+      full_name: fullName,
+      phone,
+      meals,
+      guests,
+      help,
+      created_at: new Date().toISOString(),
+    }
+    db.holiday_rsvps.push(rsvp)
+    saveDb(db)
+
+    res.json({
+      rsvp: publicHolidayRsvp(rsvp),
+      person: { id: person.id, name: person.name },
+      addresses: mealAddressesForIds(event, allMealIds),
+      holiday: publicHolidayEvent(event),
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(400).json({ error: e.message || 'Could not save holiday RSVP' })
+  }
+})
+
+app.patch('/admin/holiday', (req, res) => {
+  try {
+    const db = requireAdmin(req, res)
+    if (!db) return
+    const body = req.body || {}
+    const next = normalizeHolidayEvent({
+      ...normalizeHolidayEvent(db.holiday_event),
+      ...(body.holiday || body),
+    })
+    if (body.enabled !== undefined) next.enabled = Boolean(body.enabled)
+    if (body.holiday_id !== undefined || body.holidayId !== undefined) {
+      next.holiday_id = body.holiday_id ?? body.holidayId
+    }
+    if (body.title !== undefined) next.title = String(body.title || '').trim()
+    if (body.statement !== undefined) {
+      next.statement =
+        String(body.statement || '').trim() || DEFAULT_HOLIDAY_STATEMENT
+    }
+    if (Array.isArray(body.meals)) {
+      next.meals = normalizeHolidayEvent({ meals: body.meals }).meals
+    }
+    db.holiday_event = next
+    saveDb(db)
+    res.json({
+      holiday: next,
+      summary: holidaySeatSummary(db, next.holiday_id),
+    })
+  } catch (e) {
+    console.error(e)
+    res.status(400).json({ error: e.message || 'Update failed' })
+  }
+})
+
 app.post('/rsvps', (req, res) => {
   try {
     const form = req.body || {}
@@ -821,6 +1098,10 @@ app.post('/admin/unlock', (req, res) => {
         })),
       week_settings: db.week_settings || {},
       capacity: capacityPayload(db, currentSunday()),
+      holiday_event: normalizeHolidayEvent(db.holiday_event),
+      holiday_rsvps: [...(db.holiday_rsvps || [])].sort((a, b) =>
+        a.created_at < b.created_at ? 1 : -1,
+      ),
     })
   }
 
@@ -863,6 +1144,10 @@ app.post('/admin/unlock', (req, res) => {
       })),
     week_settings: db.week_settings || {},
     capacity: capacityPayload(db, currentSunday()),
+    holiday_event: normalizeHolidayEvent(db.holiday_event),
+    holiday_rsvps: [...(db.holiday_rsvps || [])].sort((a, b) =>
+      a.created_at < b.created_at ? 1 : -1,
+    ),
   })
 })
 

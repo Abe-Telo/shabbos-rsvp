@@ -6,6 +6,7 @@ import {
   getSponsorships,
   storageMode,
   unlockAdmin,
+  updateAdminHoliday,
   updateAdminRsvp,
   updateAdminSettings,
 } from '../lib/api'
@@ -16,6 +17,13 @@ import {
   mealStyleLabel,
   seatsForRsvp,
 } from '../lib/formConfig'
+import {
+  defaultHolidayStatement,
+  eventFromPackage,
+  fetchHolidayCatalog,
+  formatMealLabel,
+  upcomingPackages,
+} from '../lib/jewishHolidays'
 import { currentSunday, formatWeekLabel } from '../lib/week'
 import { fileToFoodPhotoData } from '../lib/auth'
 
@@ -444,6 +452,18 @@ export default function AdminPage() {
   const [guestLimitDraft, setGuestLimitDraft] = useState('')
   const [settingsMsg, setSettingsMsg] = useState('')
   const [savingSettings, setSavingSettings] = useState(false)
+  const [holidayDraft, setHolidayDraft] = useState({
+    enabled: false,
+    holiday_id: null,
+    title: '',
+    statement: defaultHolidayStatement(),
+    meals: [],
+  })
+  const [holidayRsvps, setHolidayRsvps] = useState([])
+  const [holidayCatalog, setHolidayCatalog] = useState([])
+  const [holidayMsg, setHolidayMsg] = useState('')
+  const [savingHoliday, setSavingHoliday] = useState(false)
+  const [catalogLoading, setCatalogLoading] = useState(false)
   const week = currentSunday()
 
   function openHistory(personOrRow) {
@@ -479,6 +499,21 @@ export default function AdminPage() {
         data.week_settings?.[week]?.guest_limit ??
         null
       setGuestLimitDraft(limit == null ? '' : String(limit))
+      const he = data.holiday_event || {
+        enabled: false,
+        holiday_id: null,
+        title: '',
+        statement: defaultHolidayStatement(),
+        meals: [],
+      }
+      setHolidayDraft({
+        enabled: Boolean(he.enabled),
+        holiday_id: he.holiday_id || null,
+        title: he.title || '',
+        statement: he.statement || defaultHolidayStatement(),
+        meals: Array.isArray(he.meals) ? he.meals : [],
+      })
+      setHolidayRsvps(data.holiday_rsvps || [])
       setUnlocked(true)
     } catch (e) {
       clearAdminSession()
@@ -493,6 +528,25 @@ export default function AdminPage() {
     if (getAdminSession()) load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!unlocked) return
+    let cancelled = false
+    ;(async () => {
+      setCatalogLoading(true)
+      try {
+        const packages = await fetchHolidayCatalog()
+        if (!cancelled) setHolidayCatalog(upcomingPackages(packages))
+      } catch {
+        if (!cancelled) setHolidayCatalog([])
+      } finally {
+        if (!cancelled) setCatalogLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [unlocked])
 
   async function onUnlock(e) {
     e.preventDefault()
@@ -517,6 +571,15 @@ export default function AdminPage() {
     setRsvps([])
     setGuestLimitDraft('')
     setSettingsMsg('')
+    setHolidayDraft({
+      enabled: false,
+      holiday_id: null,
+      title: '',
+      statement: defaultHolidayStatement(),
+      meals: [],
+    })
+    setHolidayRsvps([])
+    setHolidayMsg('')
   }
 
   async function saveGuestLimit(e) {
@@ -542,6 +605,111 @@ export default function AdminPage() {
     } finally {
       setSavingSettings(false)
     }
+  }
+
+  function applyHolidayPackage(packageId) {
+    const pkg = holidayCatalog.find((p) => p.id === packageId)
+    if (!pkg) return
+    const next = eventFromPackage(pkg)
+    setHolidayDraft((prev) => ({
+      ...next,
+      enabled: prev.enabled,
+      statement: prev.statement || next.statement,
+      meals: next.meals.map((m, i) => {
+        const old = prev.meals?.[i]
+        if (old && old.id === m.id) {
+          return {
+            ...m,
+            hosted: old.hosted !== false,
+            host_name: old.host_name || '',
+            address: old.address || '',
+            notes: old.notes || '',
+          }
+        }
+        return m
+      }),
+    }))
+  }
+
+  function updateMeal(idx, patch) {
+    setHolidayDraft((prev) => ({
+      ...prev,
+      meals: prev.meals.map((m, i) => (i === idx ? { ...m, ...patch } : m)),
+    }))
+  }
+
+  async function saveHoliday(e) {
+    e?.preventDefault?.()
+    setSavingHoliday(true)
+    setHolidayMsg('')
+    setError('')
+    try {
+      const body = await updateAdminHoliday({
+        enabled: holidayDraft.enabled,
+        holiday_id: holidayDraft.holiday_id,
+        title: holidayDraft.title,
+        statement: holidayDraft.statement,
+        meals: holidayDraft.meals,
+      })
+      const he = body.holiday || holidayDraft
+      setHolidayDraft({
+        enabled: Boolean(he.enabled),
+        holiday_id: he.holiday_id || null,
+        title: he.title || '',
+        statement: he.statement || defaultHolidayStatement(),
+        meals: Array.isArray(he.meals) ? he.meals : [],
+      })
+      setHolidayMsg(
+        he.enabled
+          ? `Holiday mode ON — ${he.title || 'event'} is live on the Holiday tab.`
+          : 'Holiday mode OFF — Holiday tab shows closed message.',
+      )
+      await load()
+    } catch (err) {
+      setError(err.message || 'Could not save holiday settings')
+    } finally {
+      setSavingHoliday(false)
+    }
+  }
+
+  function exportHolidayCsv() {
+    const header = [
+      'holiday_id',
+      'full_name',
+      'phone',
+      'meals',
+      'guest_names',
+      'guest_count',
+      'guest_meals',
+      'donate',
+      'potluck',
+      'clean',
+      'help_notes',
+      'created_at',
+    ]
+    const lines = [header.join(',')]
+    for (const r of holidayRsvps) {
+      const guests = r.guests || []
+      lines.push(
+        [
+          r.holiday_id,
+          r.full_name,
+          r.phone,
+          (r.meals || []).join('; '),
+          guests.map((g) => g.name).join('; '),
+          guests.reduce((n, g) => n + (Number(g.count) || 0), 0),
+          guests.map((g) => `${g.name}:${(g.meals || []).join('/')}`).join('; '),
+          r.help?.donate ? 'yes' : '',
+          r.help?.potluck ? 'yes' : '',
+          r.help?.clean ? 'yes' : '',
+          r.help?.notes || '',
+          r.created_at,
+        ]
+          .map(csvEscape)
+          .join(','),
+      )
+    }
+    downloadCsv(`holiday-rsvps-${holidayDraft.holiday_id || 'event'}.csv`, lines)
   }
 
   const thisWeekSeatCount = useMemo(
@@ -852,6 +1020,232 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+
+          <div className="panel" style={{ marginBottom: '1rem' }}>
+            <h2>Holiday mode</h2>
+            <p className="hint">
+              Turns on the <strong>Holiday</strong> tab. Guests pick night/day
+              meals; addresses stay hidden until after they submit. Calendar
+              from Hebcal (next 10 years).
+            </p>
+
+            <div className="field">
+              <label className="choice">
+                <input
+                  type="checkbox"
+                  checked={holidayDraft.enabled}
+                  onChange={(e) =>
+                    setHolidayDraft((h) => ({ ...h, enabled: e.target.checked }))
+                  }
+                />
+                <span>Enable holiday RSVP (show on Holiday tab)</span>
+              </label>
+            </div>
+
+            <div className="field">
+              <label>Pick holiday</label>
+              <select
+                className="sheet-input"
+                value={holidayDraft.holiday_id || ''}
+                disabled={catalogLoading}
+                onChange={(e) => applyHolidayPackage(e.target.value)}
+              >
+                <option value="">
+                  {catalogLoading ? 'Loading calendar…' : 'Select a holiday…'}
+                </option>
+                {holidayCatalog.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title} ({p.start_date} → {p.end_date})
+                  </option>
+                ))}
+              </select>
+              {!catalogLoading && holidayCatalog.length === 0 && (
+                <p className="hint" style={{ marginTop: '0.4rem' }}>
+                  Could not load Hebcal. You can still edit meals manually below
+                  if an event was already saved.
+                </p>
+              )}
+            </div>
+
+            <div className="field">
+              <label>Title shown to guests</label>
+              <input
+                type="text"
+                value={holidayDraft.title}
+                onChange={(e) =>
+                  setHolidayDraft((h) => ({ ...h, title: e.target.value }))
+                }
+                placeholder="e.g. Rosh Hashanah 5787"
+              />
+            </div>
+
+            <div className="field">
+              <label>Yom Tov help statement</label>
+              <textarea
+                value={holidayDraft.statement}
+                onChange={(e) =>
+                  setHolidayDraft((h) => ({ ...h, statement: e.target.value }))
+                }
+                rows={4}
+              />
+            </div>
+
+            <h3
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.05rem',
+                margin: '0.5rem 0 0.75rem',
+              }}
+            >
+              Meals (night / day)
+            </h3>
+            {holidayDraft.meals.length === 0 && (
+              <div className="empty">Pick a holiday to load meal slots.</div>
+            )}
+            {holidayDraft.meals.map((m, idx) => (
+              <div
+                key={m.id}
+                className="rsvp-row"
+                style={{ marginBottom: '0.75rem' }}
+              >
+                <div className="field" style={{ marginBottom: '0.5rem' }}>
+                  <label className="choice">
+                    <input
+                      type="checkbox"
+                      checked={m.hosted !== false}
+                      onChange={(e) =>
+                        updateMeal(idx, { hosted: e.target.checked })
+                      }
+                    />
+                    <span>
+                      Hosting {formatMealLabel(m)} ({m.period})
+                    </span>
+                  </label>
+                </div>
+                {m.hosted !== false && (
+                  <>
+                    <div className="field">
+                      <label>Label</label>
+                      <input
+                        type="text"
+                        value={m.label || ''}
+                        onChange={(e) =>
+                          updateMeal(idx, { label: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Host name</label>
+                      <input
+                        type="text"
+                        value={m.host_name || ''}
+                        onChange={(e) =>
+                          updateMeal(idx, { host_name: e.target.value })
+                        }
+                        placeholder="Who is hosting this meal"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Address (shown after guest submits)</label>
+                      <textarea
+                        value={m.address || ''}
+                        onChange={(e) =>
+                          updateMeal(idx, { address: e.target.value })
+                        }
+                        rows={2}
+                        placeholder="Street, city…"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Notes</label>
+                      <input
+                        type="text"
+                        value={m.notes || ''}
+                        onChange={(e) =>
+                          updateMeal(idx, { notes: e.target.value })
+                        }
+                        placeholder="Optional timing / parking"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+
+            {holidayMsg && <div className="banner banner-ok">{holidayMsg}</div>}
+            <div className="actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={savingHoliday}
+                onClick={saveHoliday}
+              >
+                {savingHoliday ? 'Saving…' : 'Save holiday settings'}
+              </button>
+            </div>
+
+            <h3
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.05rem',
+                margin: '1.25rem 0 0.55rem',
+              }}
+            >
+              Holiday RSVPs ({holidayRsvps.length})
+            </h3>
+            {holidayRsvps.length === 0 ? (
+              <div className="empty">No holiday RSVPs yet.</div>
+            ) : (
+              <>
+                <div className="list">
+                  {holidayRsvps.slice(0, 40).map((r) => (
+                    <div className="rsvp-row" key={r.id}>
+                      <strong>{r.full_name}</strong>
+                      <div className="meta">{r.phone}</div>
+                      <div className="meta">
+                        Meals:{' '}
+                        {(r.meals || [])
+                          .map(
+                            (id) =>
+                              holidayDraft.meals.find((m) => m.id === id)
+                                ?.label || id,
+                          )
+                          .join(', ')}
+                      </div>
+                      {(r.guests || []).length > 0 && (
+                        <div className="meta">
+                          Guests:{' '}
+                          {r.guests
+                            .map(
+                              (g) =>
+                                `${g.name || 'Guest'} ×${g.count} (${(g.meals || []).join('/')})`,
+                            )
+                            .join('; ')}
+                        </div>
+                      )}
+                      <div className="tags">
+                        {r.help?.donate && <span className="tag">Donate</span>}
+                        {r.help?.potluck && <span className="tag">Potluck</span>}
+                        {r.help?.clean && <span className="tag">Clean</span>}
+                      </div>
+                      {r.help?.notes && (
+                        <div className="meta">{r.help.notes}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={exportHolidayCsv}
+                  >
+                    Export holiday CSV
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {view === 'sheet' && (
