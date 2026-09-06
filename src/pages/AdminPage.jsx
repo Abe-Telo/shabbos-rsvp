@@ -535,7 +535,8 @@ export default function AdminPage() {
     ;(async () => {
       setCatalogLoading(true)
       try {
-        const packages = await fetchHolidayCatalog()
+        // force:true clears the bad v1 cache that merged 10 years of RH into one list
+        const packages = await fetchHolidayCatalog({ force: true })
         if (!cancelled) setHolidayCatalog(upcomingPackages(packages))
       } catch {
         if (!cancelled) setHolidayCatalog([])
@@ -614,19 +615,22 @@ export default function AdminPage() {
     setHolidayDraft((prev) => ({
       ...next,
       enabled: prev.enabled,
-      statement: prev.statement || next.statement,
-      meals: next.meals.map((m, i) => {
-        const old = prev.meals?.[i]
-        if (old && old.id === m.id) {
-          return {
-            ...m,
-            hosted: old.hosted !== false,
-            host_name: old.host_name || '',
-            address: old.address || '',
-            notes: old.notes || '',
-          }
+      // Keep custom statement if they already edited it for this save session
+      statement:
+        prev.holiday_id === next.holiday_id && prev.statement
+          ? prev.statement
+          : next.statement,
+      // Always take the package meal list (4 for RH) — don't keep leftover old slots
+      meals: next.meals.map((m) => {
+        const old = (prev.meals || []).find((x) => x.id === m.id)
+        if (!old) return m
+        return {
+          ...m,
+          hosted: old.hosted !== false,
+          host_name: old.host_name || '',
+          address: old.address || '',
+          notes: old.notes || '',
         }
-        return m
       }),
     }))
   }

@@ -3,7 +3,7 @@
  * https://www.hebcal.com/home/195/jewish-calendar-rest-api
  */
 
-const CACHE_KEY = 'shabbos-jewish-holidays-v1'
+const CACHE_KEY = 'shabbos-jewish-holidays-v2'
 const CACHE_MS = 7 * 24 * 60 * 60 * 1000
 
 const DEFAULT_STATEMENT =
@@ -66,6 +66,7 @@ function holidayKey(slug, year) {
 
 /**
  * Group Hebcal yomtov items into selectable holiday packages.
+ * Each occurrence (per year) is its own package — never merge 10 years of RH into one meal list.
  */
 export function buildHolidayPackages(items) {
   const list = (items || []).filter(
@@ -74,42 +75,88 @@ export function buildHolidayPackages(items) {
   const packages = []
   const used = new Set()
 
-  function takeMatching(pred) {
-    return list.filter((it) => {
-      if (used.has(it.date + it.title)) return false
-      return pred(it)
-    })
+  function markUsed(itemsIn) {
+    for (const it of itemsIn) used.add(it.date + it.title)
   }
 
-  // Rosh Hashana (I + II)
-  const rh = takeMatching((it) => /^Rosh Hashana/i.test(it.title)).sort((a, b) =>
-    a.date.localeCompare(b.date),
-  )
-  if (rh.length) {
-    rh.forEach((it) => used.add(it.date + it.title))
-    const year = rh[0].date.slice(0, 4)
-    const days = rh.map((it) => it.date)
+  function unusedMatching(pred) {
+    return list
+      .filter((it) => !used.has(it.date + it.title) && pred(it))
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }
+
+  /** Split sorted items into clusters of nearby dates (same holiday occurrence). */
+  function clusterNearby(itemsIn, maxGapDays = 2) {
+    const clusters = []
+    let current = []
+    for (const it of itemsIn) {
+      if (!current.length) {
+        current = [it]
+        continue
+      }
+      const prev = current[current.length - 1]
+      const gap =
+        (new Date(`${it.date}T12:00:00`).getTime() -
+          new Date(`${prev.date}T12:00:00`).getTime()) /
+        (24 * 60 * 60 * 1000)
+      if (gap <= maxGapDays) current.push(it)
+      else {
+        clusters.push(current)
+        current = [it]
+      }
+    }
+    if (current.length) clusters.push(current)
+    return clusters
+  }
+
+  function hebrewYearOf(it) {
+    return it.hdate?.match(/\d{4}/)?.[0] || it.date.slice(0, 4)
+  }
+
+  function pushDayNightPackage({
+    cluster,
+    slug,
+    kind,
+    titleFor,
+  }) {
+    markUsed(cluster)
+    const days = cluster.map((it) => it.date)
+    const year = days[0].slice(0, 4)
+    const hy = hebrewYearOf(cluster[0])
     packages.push({
-      id: holidayKey('rosh-hashana', year),
-      slug: 'rosh-hashana',
-      title: `Rosh Hashanah ${rh[0].hdate?.match(/\d{4}/)?.[0] || year}`,
-      hebrew_year: rh[0].hdate || '',
+      id: holidayKey(slug, year),
+      slug,
+      title: titleFor(hy, year, cluster),
+      hebrew_year: cluster[0].hdate || '',
       start_date: addDays(days[0], -1),
       end_date: days[days.length - 1],
-      kind: 'rosh-hashana',
+      kind,
       meals: slotsForDays(days, { nights: true }),
     })
   }
 
-  // Yom Kippur — erev night + break-fast often; offer Night (erev) + Day
-  const yk = takeMatching((it) => /^Yom Kippur$/i.test(it.title))
-  yk.forEach((it) => {
-    used.add(it.date + it.title)
+  // Rosh Hashana — 2 days per year → Night1/Day1/Night2/Day2
+  for (const cluster of clusterNearby(
+    unusedMatching((it) => /^Rosh Hashana/i.test(it.title)),
+    2,
+  )) {
+    pushDayNightPackage({
+      cluster,
+      slug: 'rosh-hashana',
+      kind: 'rosh-hashana',
+      titleFor: (hy) => `Rosh Hashanah ${hy}`,
+    })
+  }
+
+  // Yom Kippur — one day each year
+  for (const it of unusedMatching((it) => /^Yom Kippur$/i.test(it.title))) {
+    markUsed([it])
     const year = it.date.slice(0, 4)
+    const hy = hebrewYearOf(it)
     packages.push({
       id: holidayKey('yom-kippur', year),
       slug: 'yom-kippur',
-      title: `Yom Kippur ${it.hdate?.match(/\d{4}/)?.[0] || year}`,
+      title: `Yom Kippur ${hy}`,
       hebrew_year: it.hdate || '',
       start_date: addDays(it.date, -1),
       end_date: it.date,
@@ -119,107 +166,74 @@ export function buildHolidayPackages(items) {
         meal('d1', 'Day (break-fast optional)', it.date, 'day'),
       ],
     })
-  })
+  }
 
   // Sukkot I+II
-  const sukkot = takeMatching((it) => /^Sukkot (I|II)$/i.test(it.title)).sort(
-    (a, b) => a.date.localeCompare(b.date),
-  )
-  if (sukkot.length) {
-    sukkot.forEach((it) => used.add(it.date + it.title))
-    const year = sukkot[0].date.slice(0, 4)
-    const days = sukkot.map((it) => it.date)
-    packages.push({
-      id: holidayKey('sukkot', year),
+  for (const cluster of clusterNearby(
+    unusedMatching((it) => /^Sukkot (I|II)$/i.test(it.title)),
+    2,
+  )) {
+    pushDayNightPackage({
+      cluster,
       slug: 'sukkot',
-      title: `Sukkot ${sukkot[0].hdate?.match(/\d{4}/)?.[0] || year}`,
-      hebrew_year: sukkot[0].hdate || '',
-      start_date: addDays(days[0], -1),
-      end_date: days[days.length - 1],
       kind: 'sukkot',
-      meals: slotsForDays(days, { nights: true }),
+      titleFor: (hy) => `Sukkot ${hy}`,
     })
   }
 
   // Shmini Atzeret / Simchat Torah
-  const shmini = takeMatching((it) =>
-    /Shmini Atzeret|Simchat Torah/i.test(it.title),
-  ).sort((a, b) => a.date.localeCompare(b.date))
-  if (shmini.length) {
-    shmini.forEach((it) => used.add(it.date + it.title))
-    const year = shmini[0].date.slice(0, 4)
-    const days = shmini.map((it) => it.date)
-    packages.push({
-      id: holidayKey('shmini-simchat', year),
+  for (const cluster of clusterNearby(
+    unusedMatching((it) => /Shmini Atzeret|Simchat Torah/i.test(it.title)),
+    2,
+  )) {
+    pushDayNightPackage({
+      cluster,
       slug: 'shmini-simchat',
-      title: `Shmini Atzeret / Simchat Torah ${year}`,
-      hebrew_year: shmini[0].hdate || '',
-      start_date: addDays(days[0], -1),
-      end_date: days[days.length - 1],
       kind: 'shmini-simchat',
-      meals: slotsForDays(days, { nights: true }),
+      titleFor: (_hy, year) => `Shmini Atzeret / Simchat Torah ${year}`,
     })
   }
 
-  // Pesach — first days (I+II) and last days (VII+VIII) as two packages
-  const pesachFirst = takeMatching((it) => /^Pesach (I|II)$/i.test(it.title)).sort(
-    (a, b) => a.date.localeCompare(b.date),
-  )
-  if (pesachFirst.length) {
-    pesachFirst.forEach((it) => used.add(it.date + it.title))
-    const year = pesachFirst[0].date.slice(0, 4)
-    const days = pesachFirst.map((it) => it.date)
-    packages.push({
-      id: holidayKey('pesach-first', year),
+  // Pesach first days (I+II)
+  for (const cluster of clusterNearby(
+    unusedMatching((it) => /^Pesach (I|II)$/i.test(it.title)),
+    2,
+  )) {
+    pushDayNightPackage({
+      cluster,
       slug: 'pesach-first',
-      title: `Pesach (first days) ${year}`,
-      hebrew_year: pesachFirst[0].hdate || '',
-      start_date: addDays(days[0], -1),
-      end_date: days[days.length - 1],
       kind: 'pesach',
-      meals: slotsForDays(days, { nights: true }),
+      titleFor: (_hy, year) => `Pesach (first days) ${year}`,
     })
   }
-  const pesachLast = takeMatching((it) =>
-    /^Pesach (VII|VIII)$/i.test(it.title),
-  ).sort((a, b) => a.date.localeCompare(b.date))
-  if (pesachLast.length) {
-    pesachLast.forEach((it) => used.add(it.date + it.title))
-    const year = pesachLast[0].date.slice(0, 4)
-    const days = pesachLast.map((it) => it.date)
-    packages.push({
-      id: holidayKey('pesach-last', year),
+
+  // Pesach last days (VII+VIII)
+  for (const cluster of clusterNearby(
+    unusedMatching((it) => /^Pesach (VII|VIII)$/i.test(it.title)),
+    2,
+  )) {
+    pushDayNightPackage({
+      cluster,
       slug: 'pesach-last',
-      title: `Pesach (last days) ${year}`,
-      hebrew_year: pesachLast[0].hdate || '',
-      start_date: addDays(days[0], -1),
-      end_date: days[days.length - 1],
       kind: 'pesach',
-      meals: slotsForDays(days, { nights: true }),
+      titleFor: (_hy, year) => `Pesach (last days) ${year}`,
     })
   }
 
   // Shavuot
-  const shavuot = takeMatching((it) => /^Shavuot/i.test(it.title)).sort((a, b) =>
-    a.date.localeCompare(b.date),
-  )
-  if (shavuot.length) {
-    shavuot.forEach((it) => used.add(it.date + it.title))
-    const year = shavuot[0].date.slice(0, 4)
-    const days = shavuot.map((it) => it.date)
-    packages.push({
-      id: holidayKey('shavuot', year),
+  for (const cluster of clusterNearby(
+    unusedMatching((it) => /^Shavuot/i.test(it.title)),
+    2,
+  )) {
+    pushDayNightPackage({
+      cluster,
       slug: 'shavuot',
-      title: `Shavuot ${year}`,
-      hebrew_year: shavuot[0].hdate || '',
-      start_date: addDays(days[0], -1),
-      end_date: days[days.length - 1],
       kind: 'shavuot',
-      meals: slotsForDays(days, { nights: true }),
+      titleFor: (_hy, year) => `Shavuot ${year}`,
     })
   }
 
-  // Fallback: any remaining major yomtov day as single-day package
+  // Fallback: remaining major yomtov days
   for (const it of list) {
     const key = it.date + it.title
     if (used.has(key)) continue
