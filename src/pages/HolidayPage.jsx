@@ -92,9 +92,8 @@ export default function HolidayPage() {
   const [phone, setPhone] = useState(remembered.phone || user?.phone || '')
   const [selectedMeals, setSelectedMeals] = useState([])
   const [bringingGuests, setBringingGuests] = useState('No')
-  const [guestName, setGuestName] = useState('')
-  const [guestCount, setGuestCount] = useState('1')
-  const [guestMeals, setGuestMeals] = useState([])
+  /** Per meal: { [mealId]: { count: string, names: string } } */
+  const [guestByMeal, setGuestByMeal] = useState({})
   const [help, setHelp] = useState({
     donate: false,
     potluck: false,
@@ -143,6 +142,34 @@ export default function HolidayPage() {
     )
   }
 
+  function setGuestField(mealId, field, value) {
+    setGuestByMeal((prev) => ({
+      ...prev,
+      [mealId]: {
+        count: prev[mealId]?.count ?? '',
+        names: prev[mealId]?.names ?? '',
+        ...prev[mealId],
+        [field]: value,
+      },
+    }))
+  }
+
+  function guestsPayload() {
+    if (bringingGuests !== 'Yes') return []
+    return hostedMeals
+      .map((m) => {
+        const g = guestByMeal[m.id] || {}
+        const count = Math.max(0, Number(g.count) || 0)
+        if (count < 1) return null
+        return {
+          name: String(g.names || '').trim() || 'Guests',
+          count,
+          meals: [m.id],
+        }
+      })
+      .filter(Boolean)
+  }
+
   function goGuests() {
     if (!fullName.trim() || !phone.trim()) {
       setError('Please enter your name and phone.')
@@ -158,24 +185,35 @@ export default function HolidayPage() {
       fullName: fullName.trim(),
       phone: phone.trim(),
     })
-    setGuestMeals((prev) => (prev.length ? prev : [...selectedMeals]))
+    // Seed empty guest rows for meals they selected (can still edit count to 0)
+    setGuestByMeal((prev) => {
+      const next = { ...prev }
+      for (const id of selectedMeals) {
+        if (!next[id]) next[id] = { count: '', names: '' }
+      }
+      return next
+    })
     setStep(STEPS.guests)
   }
 
   function goHelp() {
     if (bringingGuests === 'Yes') {
-      const count = Number(guestCount)
-      if (!Number.isFinite(count) || count < 1) {
-        setError('How many guests are you bringing?')
+      const rows = guestsPayload()
+      if (!rows.length) {
+        setError(
+          'Enter how many guests for at least one meal (leave other meals blank or 0).',
+        )
         return
       }
-      if (!guestName.trim()) {
-        setError('Please add a name for your guest(s).')
-        return
-      }
-      if (!guestMeals.length) {
-        setError('Which meals do your guests need?')
-        return
+      for (const m of hostedMeals) {
+        const g = guestByMeal[m.id] || {}
+        const count = Math.max(0, Number(g.count) || 0)
+        if (count > 0 && !String(g.names || '').trim()) {
+          setError(
+            `Add guest name(s) for ${formatMealLabel(m)} (or set count to 0).`,
+          )
+          return
+        }
       }
     }
     setError('')
@@ -186,21 +224,11 @@ export default function HolidayPage() {
     setSaving(true)
     setError('')
     try {
-      const guests =
-        bringingGuests === 'Yes'
-          ? [
-              {
-                name: guestName.trim(),
-                count: Number(guestCount) || 1,
-                meals: guestMeals,
-              },
-            ]
-          : []
       const result = await submitHolidayRsvp({
         fullName: fullName.trim(),
         phone: phone.trim(),
         meals: selectedMeals,
-        guests,
+        guests: guestsPayload(),
         help,
       })
       saveRememberedForm({
@@ -319,12 +347,13 @@ export default function HolidayPage() {
 
       {step === STEPS.guests && (
         <div className="panel">
-          <h2>Guests</h2>
+          <h2>Guests per meal</h2>
           <p className="hint">
-            Step 2 of 3 — guest name, how many, and which meals they need.
+            Step 2 of 3 — for each date, how many guests and their names. Leave
+            a meal at 0 if nobody extra is coming that meal.
           </p>
           <div className="field">
-            <label>Are you bringing guests?</label>
+            <label>Are you bringing guests to any meal?</label>
             <div className="choices">
               {['No', 'Yes'].map((v) => (
                 <label className="choice" key={v}>
@@ -340,48 +369,49 @@ export default function HolidayPage() {
             </div>
           </div>
           {bringingGuests === 'Yes' && (
-            <>
-              <div className="field">
-                <label>
-                  Guest name(s) <span className="req">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  placeholder="e.g. Sarah & family"
-                />
-              </div>
-              <div className="field">
-                <label>
-                  How many guests? <span className="req">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  inputMode="numeric"
-                  value={guestCount}
-                  onChange={(e) => setGuestCount(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label>
-                  Which meals do they need? <span className="req">*</span>
-                </label>
-                <div className="choices">
-                  {hostedMeals.map((m) => (
-                    <label className="choice" key={m.id}>
+            <div className="holiday-guest-meals">
+              {hostedMeals.map((m) => {
+                const g = guestByMeal[m.id] || { count: '', names: '' }
+                return (
+                  <div className="holiday-guest-meal" key={m.id}>
+                    <strong>{formatMealLabel(m)}</strong>
+                    <div className="field" style={{ marginTop: '0.65rem' }}>
+                      <label>How many guests?</label>
                       <input
-                        type="checkbox"
-                        checked={guestMeals.includes(m.id)}
-                        onChange={() => toggleId(m.id, setGuestMeals)}
+                        type="number"
+                        min="0"
+                        inputMode="numeric"
+                        value={g.count}
+                        onChange={(e) =>
+                          setGuestField(m.id, 'count', e.target.value)
+                        }
+                        placeholder="0"
                       />
-                      <span>{formatMealLabel(m)}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </>
+                    </div>
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label>
+                        Guest name(s)
+                        {Number(g.count) > 0 ? (
+                          <>
+                            {' '}
+                            <span className="req">*</span>
+                          </>
+                        ) : null}
+                      </label>
+                      <input
+                        type="text"
+                        value={g.names}
+                        onChange={(e) =>
+                          setGuestField(m.id, 'names', e.target.value)
+                        }
+                        placeholder="e.g. Sarah Cohen, Dovid Levy"
+                        disabled={!g.count || Number(g.count) < 1}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
           <div className="actions">
             <button
@@ -506,9 +536,7 @@ export default function HolidayPage() {
               onClick={() => {
                 setSelectedMeals([])
                 setBringingGuests('No')
-                setGuestName('')
-                setGuestCount('1')
-                setGuestMeals([])
+                setGuestByMeal({})
                 setHelp({
                   donate: false,
                   potluck: false,

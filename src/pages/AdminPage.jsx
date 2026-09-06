@@ -700,9 +700,13 @@ export default function AdminPage() {
           r.full_name,
           r.phone,
           (r.meals || []).join('; '),
-          guests.map((g) => g.name).join('; '),
+          guests
+            .map((g) => `${(g.meals || []).join('/')}:${g.name}`)
+            .join('; '),
           guests.reduce((n, g) => n + (Number(g.count) || 0), 0),
-          guests.map((g) => `${g.name}:${(g.meals || []).join('/')}`).join('; '),
+          guests
+            .map((g) => `${(g.meals || []).join('/')}:×${g.count}`)
+            .join('; '),
           r.help?.donate ? 'yes' : '',
           r.help?.potluck ? 'yes' : '',
           r.help?.clean ? 'yes' : '',
@@ -1219,13 +1223,19 @@ export default function AdminPage() {
                       </div>
                       {(r.guests || []).length > 0 && (
                         <div className="meta">
-                          Guests:{' '}
+                          Guests by meal:{' '}
                           {r.guests
-                            .map(
-                              (g) =>
-                                `${g.name || 'Guest'} ×${g.count} (${(g.meals || []).join('/')})`,
-                            )
-                            .join('; ')}
+                            .map((g) => {
+                              const mealLabels = (g.meals || [])
+                                .map(
+                                  (id) =>
+                                    holidayDraft.meals.find((m) => m.id === id)
+                                      ?.label || id,
+                                )
+                                .join('/')
+                              return `${mealLabels}: ${g.name || 'Guest'} ×${g.count}`
+                            })
+                            .join(' · ')}
                         </div>
                       )}
                       <div className="tags">
