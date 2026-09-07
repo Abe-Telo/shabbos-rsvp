@@ -90,7 +90,11 @@ function SheetTable({ columns, rows, empty, onRowClick }) {
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >
               {columns.map((c) => (
-                <td key={c.key} title={String(row[c.key] ?? '')}>
+                <td
+                  key={c.key}
+                  className={c.wrap ? 'sheet-cell-wrap' : undefined}
+                  title={String(row[c.key] ?? '')}
+                >
                   {c.key === 'name' ? (
                     <span className="person-heading">
                       <PersonAvatar
@@ -450,6 +454,7 @@ export default function AdminPage() {
   const [mainTab, setMainTab] = useState('holiday')
   const [shabbosSub, setShabbosSub] = useState('rsvps')
   const [holidaySub, setHolidaySub] = useState('setup')
+  const [holidayMealFilter, setHolidayMealFilter] = useState('all')
   const [contactsSub, setContactsSub] = useState('sheet')
   const [historyPerson, setHistoryPerson] = useState(null)
   const [guestLimitDraft, setGuestLimitDraft] = useState('')
@@ -867,8 +872,14 @@ export default function AdminPage() {
 
   const holidayMealSummary = useMemo(() => {
     const meals = holidayDraft.meals || []
+    const idsInRsvps = new Set(
+      holidayRsvps.flatMap((r) => [
+        ...(r.meals || []),
+        ...(r.guests || []).flatMap((g) => g.meals || []),
+      ]),
+    )
     return meals
-      .filter((m) => m.hosted !== false)
+      .filter((m) => m.hosted !== false || idsInRsvps.has(m.id))
       .map((m) => {
         let people = 0
         let guests = 0
@@ -889,6 +900,129 @@ export default function AdminPage() {
         }
       })
   }, [holidayDraft.meals, holidayRsvps])
+
+  const holidayRsvpSheet = useMemo(() => {
+    const mealById = Object.fromEntries(
+      (holidayDraft.meals || []).map((m) => [m.id, m]),
+    )
+    const labelOf = (id) => mealById[id]?.label || id
+
+    const list =
+      holidayMealFilter === 'all'
+        ? holidayRsvps
+        : holidayRsvps.filter((r) =>
+            (r.meals || []).includes(holidayMealFilter),
+          )
+
+    return [...list]
+      .sort((a, b) =>
+        String(a.full_name || '').localeCompare(String(b.full_name || '')),
+      )
+      .map((r) => {
+        const help = r.help || {}
+        const allGuests = (r.guests || [])
+          .map((g) => {
+            const meals = (g.meals || []).map(labelOf).join('/')
+            return `${meals}: ${g.name || 'Guest'} ×${g.count}`
+          })
+          .join('; ')
+
+        const row = {
+          id: r.id,
+          name: r.full_name || '',
+          phone: r.phone || '',
+          meals: (r.meals || []).map(labelOf).join(', ') || '—',
+          guests: allGuests || '—',
+          donate: help.donate
+            ? help.amount
+              ? `Yes · ${help.amount}`
+              : 'Yes'
+            : 'No',
+          potluck: help.potluck ? 'Yes' : 'No',
+          clean: help.clean ? 'Yes' : 'No',
+          notes: help.notes || '—',
+          submitted: r.created_at
+            ? new Date(r.created_at).toLocaleString()
+            : '—',
+        }
+
+        if (holidayMealFilter !== 'all') {
+          const gFor = (r.guests || []).filter((g) =>
+            (g.meals || []).includes(holidayMealFilter),
+          )
+          const guestCount = gFor.reduce(
+            (n, g) => n + Math.max(0, Number(g.count) || 0),
+            0,
+          )
+          row.guests =
+            gFor.length === 0
+              ? '—'
+              : gFor
+                  .map((g) => `${g.name || 'Guest'} ×${g.count}`)
+                  .join('; ')
+          row.guest_count = String(guestCount)
+          row.seats = String(1 + guestCount)
+        } else {
+          for (const m of holidayDraft.meals || []) {
+            const coming = (r.meals || []).includes(m.id)
+            row[`meal_${m.id}`] = coming ? 'Yes' : '—'
+            const gFor = (r.guests || []).filter((g) =>
+              (g.meals || []).includes(m.id),
+            )
+            const guestCount = gFor.reduce(
+              (n, g) => n + Math.max(0, Number(g.count) || 0),
+              0,
+            )
+            const names = gFor
+              .map((g) => g.name)
+              .filter(Boolean)
+              .join(', ')
+            row[`guests_${m.id}`] = coming
+              ? guestCount
+                ? `${guestCount}${names ? ` · ${names}` : ''}`
+                : '0'
+              : '—'
+          }
+        }
+
+        return row
+      })
+  }, [holidayDraft.meals, holidayRsvps, holidayMealFilter])
+
+  const holidayRsvpColumns = useMemo(() => {
+    if (holidayMealFilter !== 'all') {
+      return [
+        { key: 'name', label: 'Name' },
+        { key: 'phone', label: 'Phone' },
+        { key: 'seats', label: 'Seats' },
+        { key: 'guest_count', label: 'Extra guests' },
+        { key: 'guests', label: 'Guest names', wrap: true },
+        { key: 'donate', label: 'Donate' },
+        { key: 'potluck', label: 'Potluck' },
+        { key: 'clean', label: 'Clean' },
+        { key: 'notes', label: 'Notes', wrap: true },
+        { key: 'submitted', label: 'Submitted' },
+      ]
+    }
+    const mealCols = holidayMealSummary.flatMap((m) => [
+      { key: `meal_${m.id}`, label: m.label },
+      {
+        key: `guests_${m.id}`,
+        label: `Guests · ${m.label}`,
+        wrap: true,
+      },
+    ])
+    return [
+      { key: 'name', label: 'Name' },
+      { key: 'phone', label: 'Phone' },
+      ...mealCols,
+      { key: 'donate', label: 'Donate' },
+      { key: 'potluck', label: 'Potluck' },
+      { key: 'clean', label: 'Clean' },
+      { key: 'notes', label: 'Notes', wrap: true },
+      { key: 'submitted', label: 'Submitted' },
+    ]
+  }, [holidayMealSummary, holidayMealFilter])
 
   const contactColumns = [
     { key: 'name', label: 'Name' },
@@ -1270,76 +1404,65 @@ export default function AdminPage() {
                 {holidayDraft.title ? ` — ${holidayDraft.title}` : ''}
               </h2>
               <p className="hint">
-                Who signed up for each meal. Export CSV from the top actions.
+                Filter by meal, then scan the sheet — every answer is a column
+                (Yes / No / — so blanks are obvious). Scroll sideways on small
+                screens.
               </p>
 
-              {holidayMealSummary.length > 0 && (
-                <div className="list" style={{ marginBottom: '1rem' }}>
-                  {holidayMealSummary.map((m) => (
-                    <div className="rsvp-row" key={m.id}>
-                      <strong>{m.label}</strong>
-                      <div className="meta">
-                        {m.people} RSVP{m.people === 1 ? '' : 's'} · {m.guests}{' '}
-                        guest seat{m.guests === 1 ? '' : 's'} · {m.total} total
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="nav" style={{ marginBottom: '0.85rem' }}>
+                <button
+                  type="button"
+                  className={`btn ${holidayMealFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => setHolidayMealFilter('all')}
+                >
+                  All ({holidayRsvps.length})
+                </button>
+                {holidayMealSummary.map((m) => (
+                  <button
+                    type="button"
+                    key={m.id}
+                    className={`btn ${holidayMealFilter === m.id ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setHolidayMealFilter(m.id)}
+                  >
+                    {m.label} ({m.total})
+                  </button>
+                ))}
+              </div>
+
+              {holidayMealFilter !== 'all' && (
+                <p className="meta" style={{ marginTop: 0 }}>
+                  {(() => {
+                    const m = holidayMealSummary.find(
+                      (x) => x.id === holidayMealFilter,
+                    )
+                    if (!m) return null
+                    return (
+                      <>
+                        <strong>{m.label}:</strong> {m.people} RSVP
+                        {m.people === 1 ? '' : 's'} · {m.guests} guest seat
+                        {m.guests === 1 ? '' : 's'} · {m.total} total seats
+                      </>
+                    )
+                  })()}
+                </p>
               )}
 
-              {holidayRsvps.length === 0 ? (
-                <div className="empty">No holiday RSVPs yet.</div>
-              ) : (
-                <div className="list">
-                  {holidayRsvps.map((r) => (
-                    <div className="rsvp-row" key={r.id}>
-                      <strong>{r.full_name}</strong>
-                      <div className="meta">{r.phone}</div>
-                      <div className="meta">
-                        Meals:{' '}
-                        {(r.meals || [])
-                          .map(
-                            (id) =>
-                              holidayDraft.meals.find((m) => m.id === id)
-                                ?.label || id,
-                          )
-                          .join(', ')}
-                      </div>
-                      {(r.guests || []).length > 0 && (
-                        <div className="meta">
-                          Guests by meal:{' '}
-                          {r.guests
-                            .map((g) => {
-                              const mealLabels = (g.meals || [])
-                                .map(
-                                  (id) =>
-                                    holidayDraft.meals.find((m) => m.id === id)
-                                      ?.label || id,
-                                )
-                                .join('/')
-                              return `${mealLabels}: ${g.name || 'Guest'} ×${g.count}`
-                            })
-                            .join(' · ')}
-                        </div>
-                      )}
-                      <div className="tags">
-                        {r.help?.donate && (
-                          <span className="tag">
-                            Donate{r.help?.amount ? ` ${r.help.amount}` : ''}
-                          </span>
-                        )}
-                        {r.help?.potluck && (
-                          <span className="tag">Potluck</span>
-                        )}
-                        {r.help?.clean && <span className="tag">Clean</span>}
-                      </div>
-                      {r.help?.notes && (
-                        <div className="meta">{r.help.notes}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              {holidayMealFilter === 'all' && holidayMealSummary.length > 0 && (
+                <p className="meta" style={{ marginTop: 0 }}>
+                  {holidayMealSummary
+                    .map(
+                      (m) =>
+                        `${m.label}: ${m.people} + ${m.guests} guests = ${m.total}`,
+                    )
+                    .join(' · ')}
+                </p>
               )}
+
+              <SheetTable
+                columns={holidayRsvpColumns}
+                rows={holidayRsvpSheet}
+                empty="No holiday RSVPs for this filter."
+              />
             </div>
           )}
 
