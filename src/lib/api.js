@@ -1119,6 +1119,51 @@ export async function getHolidayRsvps() {
   }
 }
 
+export async function findMyHolidayRsvp({ fullName, phone } = {}) {
+  const name = String(fullName || '').trim()
+  const phoneVal = String(phone || '').trim()
+  if (!name && !phoneVal) return { rsvp: null, addresses: [] }
+
+  if (API_URL) {
+    const params = new URLSearchParams()
+    if (phoneVal) params.set('phone', phoneVal)
+    if (name) params.set('name', name)
+    return api(`/holiday/rsvps/mine?${params}`)
+  }
+
+  const data = loadLocal()
+  const event = normalizeHolidayEventLocal(data.holiday_event)
+  if (!event.holiday_id) return { rsvp: null, addresses: [], holiday_id: null }
+  const phoneKey = normalizePhone(phoneVal)
+  const nameKey = name.toLowerCase()
+  const matches = (data.holiday_rsvps || []).filter((r) => {
+    if (r.holiday_id !== event.holiday_id) return false
+    if (phoneKey && normalizePhone(r.phone) === phoneKey) return true
+    if (nameKey && String(r.full_name || '').trim().toLowerCase() === nameKey) {
+      return true
+    }
+    return false
+  })
+  const rsvp = matches.sort((a, b) => {
+    const aPhone = phoneKey && normalizePhone(a.phone) === phoneKey ? 1 : 0
+    const bPhone = phoneKey && normalizePhone(b.phone) === phoneKey ? 1 : 0
+    if (aPhone !== bPhone) return bPhone - aPhone
+    return String(b.created_at || '').localeCompare(String(a.created_at || ''))
+  })[0]
+  if (!rsvp) {
+    return { rsvp: null, addresses: [], holiday_id: event.holiday_id }
+  }
+  const allMealIds = [
+    ...(rsvp.meals || []),
+    ...(rsvp.guests || []).flatMap((g) => g.meals || []),
+  ]
+  return {
+    rsvp,
+    addresses: holidayAddressesLocal(event, allMealIds),
+    holiday_id: event.holiday_id,
+  }
+}
+
 export async function submitHolidayRsvp(form) {
   if (API_URL) {
     return api('/holiday/rsvps', {

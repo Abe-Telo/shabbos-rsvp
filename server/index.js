@@ -859,6 +859,52 @@ app.get('/holiday/rsvps', (_req, res) => {
   })
 })
 
+/** Lookup own holiday RSVP (phone preferred; name fallback). */
+app.get('/holiday/rsvps/mine', (req, res) => {
+  const phoneKey = digits(req.query.phone)
+  const name = String(req.query.name || '')
+    .trim()
+    .toLowerCase()
+  if (!phoneKey && !name) {
+    return res.status(400).json({ error: 'phone or name required' })
+  }
+  const db = loadDb()
+  const event = normalizeHolidayEvent(db.holiday_event)
+  if (!event.holiday_id) {
+    return res.json({ rsvp: null, addresses: [], holiday_id: null })
+  }
+  const matches = (db.holiday_rsvps || []).filter((r) => {
+    if (r.holiday_id !== event.holiday_id) return false
+    if (phoneKey && digits(r.phone) === phoneKey) return true
+    if (name && String(r.full_name || '').trim().toLowerCase() === name) {
+      return true
+    }
+    return false
+  })
+  const rsvp = matches.sort((a, b) => {
+    const aPhone = phoneKey && digits(a.phone) === phoneKey ? 1 : 0
+    const bPhone = phoneKey && digits(b.phone) === phoneKey ? 1 : 0
+    if (aPhone !== bPhone) return bPhone - aPhone
+    return String(b.created_at || '').localeCompare(String(a.created_at || ''))
+  })[0]
+  if (!rsvp) {
+    return res.json({
+      rsvp: null,
+      addresses: [],
+      holiday_id: event.holiday_id,
+    })
+  }
+  const allMealIds = [
+    ...(rsvp.meals || []),
+    ...(rsvp.guests || []).flatMap((g) => g.meals || []),
+  ]
+  res.json({
+    rsvp,
+    addresses: mealAddressesForIds(event, allMealIds),
+    holiday_id: event.holiday_id,
+  })
+})
+
 app.get('/holiday/food', (req, res) => {
   const db = loadDb()
   const event = normalizeHolidayEvent(db.holiday_event)

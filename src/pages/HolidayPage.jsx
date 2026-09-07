@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  findMyHolidayRsvp,
   getHolidayEvent,
   getHolidayFood,
   getHolidayRsvps,
@@ -16,6 +17,8 @@ import { useAuth } from '../lib/AuthContext'
 const STEPS = {
   loading: 'loading',
   closed: 'closed',
+  returning: 'returning',
+  all_set: 'all_set',
   meals: 'meals',
   guests: 'guests',
   help: 'help',
@@ -373,6 +376,42 @@ function FoodTab({
   )
 }
 
+function HolidaySubmissionSummary({ rsvp, hostedMeals }) {
+  if (!rsvp) return null
+  const mealLabels = (rsvp.meals || [])
+    .map((id) => hostedMeals.find((m) => m.id === id)?.label || id)
+    .join(', ')
+  const guests = (rsvp.guests || [])
+    .map((g) => {
+      const meals = (g.meals || [])
+        .map((id) => hostedMeals.find((m) => m.id === id)?.label || id)
+        .join('/')
+      return `${meals}: ${g.name || 'Guest'} ×${g.count}`
+    })
+    .join(' · ')
+  const help = rsvp.help || {}
+  return (
+    <div className="rsvp-row" style={{ marginTop: '0.75rem' }}>
+      <strong>{rsvp.full_name}</strong>
+      <div className="meta">Meals: {mealLabels || '—'}</div>
+      <div className="meta">Guests: {guests || 'None'}</div>
+      <div className="tags" style={{ marginTop: '0.35rem' }}>
+        {help.donate && (
+          <span className="tag">
+            Donate{help.amount ? ` ${help.amount}` : ''}
+          </span>
+        )}
+        {help.potluck && <span className="tag">Potluck</span>}
+        {help.clean && <span className="tag">Clean</span>}
+        {!help.donate && !help.potluck && !help.clean && (
+          <span className="tag">No help marked</span>
+        )}
+      </div>
+      {help.notes && <div className="meta">{help.notes}</div>}
+    </div>
+  )
+}
+
 export default function HolidayPage() {
   const { user } = useAuth()
   const remembered = loadRememberedForm()
@@ -383,6 +422,7 @@ export default function HolidayPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [addresses, setAddresses] = useState([])
+  const [existing, setExisting] = useState(null)
   const [fullName, setFullName] = useState(
     remembered.fullName || user?.full_name || '',
   )
@@ -404,6 +444,33 @@ export default function HolidayPage() {
     () => (holiday?.meals || []).filter((m) => m.hosted !== false),
     [holiday],
   )
+
+  function applyRsvpToForm(rsvp, phoneFallback = '') {
+    if (!rsvp) return
+    setFullName(rsvp.full_name || '')
+    setPhone(rsvp.phone || phoneFallback || '')
+    setSelectedMeals([...(rsvp.meals || [])])
+    const byMeal = {}
+    let anyGuests = false
+    for (const g of rsvp.guests || []) {
+      for (const mid of g.meals || []) {
+        anyGuests = true
+        byMeal[mid] = {
+          count: String(g.count ?? ''),
+          names: g.name || '',
+        }
+      }
+    }
+    setBringingGuests(anyGuests ? 'Yes' : 'No')
+    setGuestByMeal(byMeal)
+    setHelp({
+      donate: Boolean(rsvp.help?.donate),
+      potluck: Boolean(rsvp.help?.potluck),
+      clean: Boolean(rsvp.help?.clean),
+      amount: rsvp.help?.amount || '',
+      notes: rsvp.help?.notes || '',
+    })
+  }
 
   async function refreshBoard() {
     const board = await getHolidayRsvps()
@@ -434,7 +501,32 @@ export default function HolidayPage() {
         setSummary(board.summary || null)
         const firstMeal = (h?.meals || []).find((m) => m.hosted !== false)
         if (firstMeal) setFoodMealId(firstMeal.id)
-        setStep(h?.enabled ? STEPS.meals : STEPS.closed)
+        if (!h?.enabled) {
+          setStep(STEPS.closed)
+          return
+        }
+        const seedName =
+          remembered.fullName || user?.full_name || fullName || ''
+        const seedPhone = remembered.phone || user?.phone || phone || ''
+        if (seedName.trim() || seedPhone.trim()) {
+          try {
+            const mine = await findMyHolidayRsvp({
+              fullName: seedName,
+              phone: seedPhone,
+            })
+            if (cancelled) return
+            if (mine?.rsvp) {
+              applyRsvpToForm(mine.rsvp, seedPhone)
+              setAddresses(mine.addresses || [])
+              setExisting(mine.rsvp)
+              setStep(STEPS.returning)
+              return
+            }
+          } catch {
+            /* fall through to blank form */
+          }
+        }
+        setStep(STEPS.meals)
       } catch (e) {
         if (!cancelled) {
           setError(e.message || 'Could not load holiday RSVP')
@@ -445,6 +537,7 @@ export default function HolidayPage() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -521,7 +614,33 @@ export default function HolidayPage() {
       .filter(Boolean)
   }
 
-  function goGuests() {
+  function startEdit() {
+    if (existing) applyRsvpToForm(existing, phone)
+    setMainTab('form')
+    setStep(STEPS.meals)
+  }
+
+  async function lookupOnIdentityBlur() {
+    const nameVal = fullName.trim()
+    const phoneVal = phone.trim()
+    if (!nameVal && !phoneVal) return
+    try {
+      const mine = await findMyHolidayRsvp({
+        fullName: nameVal,
+        phone: phoneVal,
+      })
+      if (!mine?.rsvp) return
+      // Don't clobber in-progress edits unless this is a fresh match
+      if (existing?.id === mine.rsvp.id && selectedMeals.length > 0) return
+      applyRsvpToForm(mine.rsvp, phoneVal)
+      setAddresses(mine.addresses || [])
+      setExisting(mine.rsvp)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function goGuests() {
     if (!fullName.trim() || !phone.trim()) {
       setError('Please enter your name and phone.')
       return
@@ -594,6 +713,7 @@ export default function HolidayPage() {
         phone: phone.trim(),
       })
       setAddresses(result.addresses || [])
+      if (result.rsvp) setExisting(result.rsvp)
       setStep(STEPS.done)
       try {
         await refreshBoard()
@@ -679,12 +799,111 @@ export default function HolidayPage() {
             </div>
           )}
 
+          {step === STEPS.returning && (
+            <div className="panel">
+              <h2>Welcome back</h2>
+              <p className="hint">
+                We already have your holiday RSVP. Need to change meals, guests,
+                or help?
+              </p>
+              <HolidaySubmissionSummary
+                rsvp={existing}
+                hostedMeals={hostedMeals}
+              />
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setStep(STEPS.all_set)}
+                >
+                  No, I&apos;m all set
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-accent"
+                  onClick={() => setMainTab('coming')}
+                >
+                  See who&apos;s coming
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={startEdit}
+                >
+                  Yes, I need to change it
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === STEPS.all_set && (
+            <div className="panel">
+              <div className="banner banner-ok">
+                Your holiday RSVP is on file.
+              </div>
+              <HolidaySubmissionSummary
+                rsvp={existing}
+                hostedMeals={hostedMeals}
+              />
+              <h2 style={{ marginTop: '1rem' }}>Addresses & hosts</h2>
+              {addresses.length === 0 ? (
+                <p className="hint">
+                  Addresses will show here once the host adds them in Admin.
+                </p>
+              ) : (
+                <div className="list">
+                  {addresses.map((a) => (
+                    <div className="rsvp-row" key={a.id}>
+                      <strong>{formatMealLabel(a)}</strong>
+                      {a.host_name && (
+                        <div className="meta">Host: {a.host_name}</div>
+                      )}
+                      {a.address && (
+                        <div
+                          className="meta"
+                          style={{ whiteSpace: 'pre-wrap' }}
+                        >
+                          {a.address}
+                        </div>
+                      )}
+                      {a.notes && <div className="meta">{a.notes}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={startEdit}
+                >
+                  Change my RSVP
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setMainTab('coming')}
+                >
+                  See who&apos;s coming
+                </button>
+              </div>
+            </div>
+          )}
+
           {step === STEPS.meals && (
             <div className="panel">
-              <h2>Your meals</h2>
+              <h2>{existing ? 'Change your meals' : 'Your meals'}</h2>
               <p className="hint">
-                Step 1 of 3 — which night / day meals do you need?
+                {existing
+                  ? 'Update any meal, then continue through guests and help to save.'
+                  : 'Step 1 of 3 — which night / day meals do you need?'}
               </p>
+              {existing && (
+                <div className="banner banner-ok" style={{ marginBottom: '1rem' }}>
+                  Editing your saved holiday RSVP — your previous answers are
+                  filled in below.
+                </div>
+              )}
               <div className="field">
                 <label>
                   Your full name <span className="req">*</span>
@@ -693,6 +912,7 @@ export default function HolidayPage() {
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  onBlur={lookupOnIdentityBlur}
                   autoComplete="name"
                 />
               </div>
@@ -704,6 +924,7 @@ export default function HolidayPage() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
+                  onBlur={lookupOnIdentityBlur}
                   autoComplete="tel"
                 />
               </div>
@@ -728,6 +949,15 @@ export default function HolidayPage() {
                 <div className="empty">No hosted meals are set up yet.</div>
               )}
               <div className="actions">
+                {existing && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setStep(STEPS.returning)}
+                  >
+                    Cancel
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -944,7 +1174,11 @@ export default function HolidayPage() {
                   disabled={saving}
                   onClick={finish}
                 >
-                  {saving ? 'Saving…' : 'Submit holiday RSVP'}
+                  {saving
+                    ? 'Saving…'
+                    : existing
+                      ? 'Update holiday RSVP'
+                      : 'Submit holiday RSVP'}
                 </button>
               </div>
             </div>
@@ -953,9 +1187,15 @@ export default function HolidayPage() {
           {step === STEPS.done && (
             <div className="panel">
               <div className="banner banner-ok">
-                You&apos;re on the holiday list.
+                {existing
+                  ? 'Your holiday RSVP was updated.'
+                  : "You're on the holiday list."}
               </div>
-              <h2>Addresses & hosts</h2>
+              <HolidaySubmissionSummary
+                rsvp={existing}
+                hostedMeals={hostedMeals}
+              />
+              <h2 style={{ marginTop: '1rem' }}>Addresses & hosts</h2>
               {addresses.length === 0 ? (
                 <p className="hint">
                   Addresses will show here once the host adds them in Admin.
@@ -986,22 +1226,9 @@ export default function HolidayPage() {
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  onClick={() => {
-                    setSelectedMeals([])
-                    setBringingGuests('No')
-                    setGuestByMeal({})
-                    setHelp({
-                      donate: false,
-                      potluck: false,
-                      clean: false,
-                      amount: '',
-                      notes: '',
-                    })
-                    setAddresses([])
-                    setStep(STEPS.meals)
-                  }}
+                  onClick={startEdit}
                 >
-                  Edit / submit again
+                  Change my RSVP
                 </button>
                 <button
                   type="button"
