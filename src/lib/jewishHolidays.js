@@ -443,6 +443,36 @@ export function formatMealLabel(meal) {
   return `${meal.label} · ${when}`
 }
 
+export const SUKKOT_MEAL_OCCASIONS = {
+  n1: 'Erev Sukkos',
+  d1: 'Sukkos 1 / Shabbos',
+  n2: 'Second night of Sukkos',
+  d2: 'Sukkos 2',
+  'sh-n1': 'Shemini Atzeres night',
+  'sh-d1': 'Shemini Atzeres / Shabbos',
+  'sh-n2': 'Simchas Torah night',
+  'sh-d2': 'Simchas Torah',
+}
+
+export function mealPeriodOf(id, meal) {
+  if (meal?.period === 'night' || meal?.period === 'day') return meal.period
+  const s = String(id || meal?.id || '')
+  if (/(^|-)n\d+$/i.test(s)) return 'night'
+  if (/(^|-)d\d+$/i.test(s)) return 'day'
+  return null
+}
+
+export function mealNumberOf(id, meals) {
+  const idx = (meals || []).findIndex((m) => m.id === id)
+  return idx >= 0 ? idx + 1 : ''
+}
+
+export function occasionNameForMeal(meal, holidayTitle) {
+  const id = String(meal?.id || meal?.meal_id || '')
+  if (SUKKOT_MEAL_OCCASIONS[id]) return SUKKOT_MEAL_OCCASIONS[id]
+  return holidayTitle || meal?.label || 'Holiday meal'
+}
+
 export function formatClockTime(raw) {
   const s = String(raw || '').trim()
   if (!s) return ''

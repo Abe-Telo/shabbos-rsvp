@@ -820,6 +820,58 @@ button.meal-cal-opt {
   flex: 1 1 12rem;
 }
 
+.admin-meal-card {
+  margin-bottom: 0.75rem;
+}
+
+.admin-meal-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  cursor: pointer;
+}
+
+.admin-meal-head input {
+  margin: 0;
+}
+
+.admin-meal-title {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.admin-meal-title strong {
+  font-size: 1.02rem;
+}
+
+.admin-meal-title em {
+  font-style: normal;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
+.admin-meal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr minmax(7.5rem, 9rem);
+  gap: 0.65rem 0.75rem;
+}
+
+.admin-meal-notes {
+  grid-column: 2 / 4;
+}
+
+@media (max-width: 720px) {
+  .admin-meal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-meal-notes {
+    grid-column: auto;
+  }
+}
+
 .holiday-cal-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8.6rem, 1fr));

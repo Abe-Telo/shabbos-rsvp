@@ -23,6 +23,9 @@ import {
   fetchHolidayCatalog,
   formatMealLabel,
   holidayHasEnded,
+  mealNumberOf,
+  mealPeriodOf,
+  occasionNameForMeal,
   titleFromHolidayId,
   upcomingPackages,
 } from '../lib/jewishHolidays'
@@ -993,13 +996,13 @@ export default function AdminPage() {
         }
         return {
           id: m.id,
-          label: m.label || formatMealLabel(m),
+          label: `${mealNumberOf(m.id, meals)}. ${occasionNameForMeal(m, holidayDraft.title)}`,
           people,
           guests,
           total: people + guests,
         }
       })
-  }, [activeHolidayMeals, activeHolidayRsvps])
+  }, [activeHolidayMeals, activeHolidayRsvps, holidayDraft.title])
 
   const holidayRsvpSheet = useMemo(() => {
     const mealById = Object.fromEntries(
@@ -1497,28 +1500,51 @@ export default function AdminPage() {
                         {group.title}
                       </h3>
                     )}
-                    {rows.map(({ m, idx }) => (
+                    {rows.map(({ m, idx }) => {
+                  const period = mealPeriodOf(m.id, m)
+                  const num = mealNumberOf(m.id, holidayDraft.meals)
+                  const occasion = occasionNameForMeal(m, holidayDraft.title)
+                  return (
                 <div
                   key={m.id}
-                  className="rsvp-row"
-                  style={{ marginBottom: '0.75rem' }}
+                  className="rsvp-row admin-meal-card"
                 >
-                  <div className="field" style={{ marginBottom: '0.5rem' }}>
-                    <label className="choice">
-                      <input
-                        type="checkbox"
-                        checked={m.hosted !== false}
-                        onChange={(e) =>
-                          updateMeal(idx, { hosted: e.target.checked })
-                        }
-                      />
-                      <span>
-                        Hosting {formatMealLabel(m)} ({m.period})
-                      </span>
-                    </label>
-                  </div>
+                  <label className="admin-meal-head">
+                    <input
+                      type="checkbox"
+                      checked={m.hosted !== false}
+                      onChange={(e) =>
+                        updateMeal(idx, { hosted: e.target.checked })
+                      }
+                    />
+                    <span className={`meal-cal-opt-icon ${period || 'day'}`}>
+                      {period === 'night' ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M15.1 3.4a8.4 8.4 0 1 0 5.5 14.6 8.8 8.8 0 0 1-5.5-14.6z"
+                          />
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="12" cy="12" r="4" fill="currentColor" />
+                          <g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                            <path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M5.2 18.8l1.7-1.7M17.1 6.9l1.7-1.7" />
+                          </g>
+                        </svg>
+                      )}
+                    </span>
+                    <span className="coming-meal-num">{num}</span>
+                    <span className="admin-meal-title">
+                      <strong>{occasion}</strong>
+                      <em>
+                        {period === 'night' ? 'Night' : 'Day'}
+                        {m.date_label ? ` · ${m.date_label}` : ''}
+                      </em>
+                    </span>
+                  </label>
                   {m.hosted !== false && (
-                    <>
+                    <div className="admin-meal-grid">
                       <div className="field">
                         <label>Label</label>
                         <input
@@ -1541,6 +1567,16 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="field">
+                        <label>Time</label>
+                        <input
+                          type="time"
+                          value={m.start_time || ''}
+                          onChange={(e) =>
+                            updateMeal(idx, { start_time: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="field">
                         <label>Address (shown after guest submits)</label>
                         <textarea
                           value={m.address || ''}
@@ -1551,17 +1587,7 @@ export default function AdminPage() {
                           placeholder="Street, city…"
                         />
                       </div>
-                      <div className="field">
-                        <label>Meal start time</label>
-                        <input
-                          type="time"
-                          value={m.start_time || ''}
-                          onChange={(e) =>
-                            updateMeal(idx, { start_time: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div className="field">
+                      <div className="field admin-meal-notes">
                         <label>Notes</label>
                         <input
                           type="text"
@@ -1572,10 +1598,11 @@ export default function AdminPage() {
                           placeholder="Optional timing / parking"
                         />
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
-                    ))}
+                  )
+                    })}
                   </div>
                 )
               })}
