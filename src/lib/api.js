@@ -54,6 +54,7 @@ function loadLocal() {
     },
     holiday_rsvps: [],
     holiday_food_items: [],
+    holiday_history: [],
   }
 }
 
@@ -785,6 +786,7 @@ export async function getSponsorships() {
     holiday_rsvps: [...(data.holiday_rsvps || [])].sort((a, b) =>
       a.created_at < b.created_at ? 1 : -1,
     ),
+    holiday_history: data.holiday_history || [],
   }
 }
 
@@ -966,21 +968,39 @@ export function comingLabel(value) {
 const DEFAULT_HOLIDAY_STATEMENT =
   'Yom Tov meals take a lot of time and money to prepare. Please help however you can — a donation, bringing a potluck dish, or helping clean up after the meal. Every bit makes hosting possible.'
 
+function mealDateRangeLocal(meals) {
+  const dates = (meals || [])
+    .map((m) => String(m?.date || '').trim())
+    .filter(Boolean)
+    .sort()
+  return {
+    start_date: dates[0] || null,
+    end_date: dates[dates.length - 1] || null,
+  }
+}
+
 function normalizeHolidayEventLocal(raw) {
   const base = {
     enabled: false,
     holiday_id: null,
     title: '',
     statement: DEFAULT_HOLIDAY_STATEMENT,
+    start_date: null,
+    end_date: null,
     meals: [],
   }
   if (!raw || typeof raw !== 'object') return base
+  const meals = Array.isArray(raw.meals) ? raw.meals : []
+  const range = mealDateRangeLocal(meals)
   return {
     enabled: Boolean(raw.enabled),
     holiday_id: raw.holiday_id || raw.holidayId || null,
     title: String(raw.title || '').trim(),
     statement: String(raw.statement || '').trim() || DEFAULT_HOLIDAY_STATEMENT,
-    meals: Array.isArray(raw.meals) ? raw.meals : [],
+    start_date:
+      String(raw.start_date || raw.startDate || '').trim() || range.start_date,
+    end_date: String(raw.end_date || raw.endDate || '').trim() || range.end_date,
+    meals,
   }
 }
 
@@ -1097,8 +1117,14 @@ export async function getHolidayEvent() {
   }
   const data = loadLocal()
   const event = normalizeHolidayEventLocal(data.holiday_event)
+  const end = event.end_date || ''
+  const today = new Date()
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const ended = Boolean(end) && String(end) < todayIso
   return {
     ...event,
+    enabled: event.enabled && !ended,
+    ended,
     meals: (event.meals || [])
       .filter((m) => m.hosted !== false)
       .map(({ address, ...rest }) => rest),
@@ -1245,16 +1271,40 @@ export async function updateAdminHoliday(patch) {
     })
   }
   const data = loadLocal()
+  const prev = normalizeHolidayEventLocal(data.holiday_event)
   const next = normalizeHolidayEventLocal({
-    ...normalizeHolidayEventLocal(data.holiday_event),
+    ...prev,
     ...patch,
     ...(patch.holiday || {}),
   })
   if (patch.enabled !== undefined) next.enabled = Boolean(patch.enabled)
   if (Array.isArray(patch.meals)) next.meals = patch.meals
+  if (prev.holiday_id && next.holiday_id && prev.holiday_id !== next.holiday_id) {
+    data.holiday_history = Array.isArray(data.holiday_history)
+      ? data.holiday_history
+      : []
+    const snap = {
+      holiday_id: prev.holiday_id,
+      title: prev.title,
+      start_date: prev.start_date,
+      end_date: prev.end_date,
+      meals: prev.meals,
+      archived_at: new Date().toISOString(),
+      reason: 'switched',
+    }
+    const idx = data.holiday_history.findIndex(
+      (h) => h.holiday_id === prev.holiday_id,
+    )
+    if (idx >= 0) data.holiday_history[idx] = { ...data.holiday_history[idx], ...snap }
+    else data.holiday_history.push(snap)
+  }
   data.holiday_event = next
   saveLocal(data)
-  return { holiday: next, summary: holidaySummaryLocal(data) }
+  return {
+    holiday: next,
+    summary: holidaySummaryLocal(data),
+    holiday_history: data.holiday_history || [],
+  }
 }
 
 export async function getHolidayFood(mealId) {

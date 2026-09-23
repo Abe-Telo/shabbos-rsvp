@@ -650,12 +650,103 @@ app.get('/people', (_req, res) => {
 const DEFAULT_HOLIDAY_STATEMENT =
   'Yom Tov meals take a lot of time and money to prepare. Please help however you can — a donation, bringing a potluck dish, or helping clean up after the meal. Every bit makes hosting possible.'
 
+function mealDateRange(meals) {
+  const dates = (meals || [])
+    .map((m) => String(m?.date || '').trim())
+    .filter(Boolean)
+    .sort()
+  return {
+    start_date: dates[0] || null,
+    end_date: dates[dates.length - 1] || null,
+  }
+}
+
+function todayIso(fromDate = new Date()) {
+  const y = fromDate.getFullYear()
+  const m = String(fromDate.getMonth() + 1).padStart(2, '0')
+  const day = String(fromDate.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function holidayHasEnded(event, fromDate = new Date()) {
+  const end =
+    event?.end_date || mealDateRange(event?.meals || []).end_date || ''
+  return Boolean(end) && String(end) < todayIso(fromDate)
+}
+
+function titleFromHolidayId(holidayId) {
+  const id = String(holidayId || '')
+  if (!id) return 'Past holiday'
+  const parts = id.split(/-(?=\d{4}$)/)
+  const slug = parts[0] || id
+  const year = parts[1] || ''
+  const names = {
+    'rosh-hashana': 'Rosh Hashanah',
+    'yom-kippur': 'Yom Kippur',
+    sukkot: 'Sukkot',
+    'sukkot-first': 'Sukkot (first half)',
+    'sukkot-last': 'Sukkot (second half)',
+    'shmini-simchat': 'Shmini Atzeret / Simchat Torah',
+    'pesach-first': 'Pesach (first days)',
+    'pesach-last': 'Pesach (last days)',
+    shavuot: 'Shavuot',
+  }
+  const name = names[slug] || slug.replace(/-/g, ' ')
+  return year ? `${name} ${year}` : name
+}
+
+function snapshotHolidayHistory(db, event, reason = 'switched') {
+  const e = normalizeHolidayEvent(event)
+  if (!e.holiday_id) return
+  db.holiday_history = Array.isArray(db.holiday_history)
+    ? db.holiday_history
+    : []
+  const snap = {
+    holiday_id: e.holiday_id,
+    title: e.title || titleFromHolidayId(e.holiday_id),
+    start_date: e.start_date,
+    end_date: e.end_date,
+    meals: e.meals,
+    archived_at: new Date().toISOString(),
+    reason,
+  }
+  const idx = db.holiday_history.findIndex((h) => h.holiday_id === e.holiday_id)
+  if (idx >= 0) db.holiday_history[idx] = { ...db.holiday_history[idx], ...snap }
+  else db.holiday_history.push(snap)
+}
+
+function ensurePastHolidayHistory(db) {
+  const event = normalizeHolidayEvent(db.holiday_event)
+  db.holiday_history = Array.isArray(db.holiday_history)
+    ? db.holiday_history
+    : []
+  const ids = new Set(
+    (db.holiday_rsvps || []).map((r) => r.holiday_id).filter(Boolean),
+  )
+  for (const id of ids) {
+    if (id === event.holiday_id && !holidayHasEnded(event)) continue
+    if (db.holiday_history.some((h) => h.holiday_id === id)) continue
+    const source = id === event.holiday_id ? event : null
+    db.holiday_history.push({
+      holiday_id: id,
+      title: source?.title || titleFromHolidayId(id),
+      start_date: source?.start_date || null,
+      end_date: source?.end_date || null,
+      meals: source?.meals || [],
+      archived_at: new Date().toISOString(),
+      reason: 'past',
+    })
+  }
+}
+
 function normalizeHolidayEvent(raw) {
   const base = {
     enabled: false,
     holiday_id: null,
     title: '',
     statement: DEFAULT_HOLIDAY_STATEMENT,
+    start_date: null,
+    end_date: null,
     meals: [],
   }
   if (!raw || typeof raw !== 'object') return base
@@ -672,23 +763,30 @@ function normalizeHolidayEvent(raw) {
         date_label: String(m.date_label || m.dateLabel || '').trim() || null,
       }))
     : []
+  const range = mealDateRange(meals)
   return {
     enabled: Boolean(raw.enabled),
     holiday_id: raw.holiday_id || raw.holidayId || null,
     title: String(raw.title || '').trim(),
     statement:
       String(raw.statement || '').trim() || DEFAULT_HOLIDAY_STATEMENT,
+    start_date: String(raw.start_date || raw.startDate || '').trim() || range.start_date,
+    end_date: String(raw.end_date || raw.endDate || '').trim() || range.end_date,
     meals,
   }
 }
 
 function publicHolidayEvent(event) {
   const e = normalizeHolidayEvent(event)
+  const ended = holidayHasEnded(e)
   return {
-    enabled: e.enabled,
+    enabled: e.enabled && !ended,
     holiday_id: e.holiday_id,
     title: e.title,
     statement: e.statement,
+    start_date: e.start_date,
+    end_date: e.end_date,
+    ended,
     meals: e.meals
       .filter((m) => m.hosted)
       .map(({ address, ...rest }) => rest),
@@ -929,7 +1027,7 @@ app.post('/holiday/food', (req, res) => {
     if (!mealId) return res.status(400).json({ error: 'Meal is required' })
     const db = loadDb()
     const event = normalizeHolidayEvent(db.holiday_event)
-    if (!event.enabled || !event.holiday_id) {
+    if (!event.enabled || !event.holiday_id || holidayHasEnded(event)) {
       return res.status(400).json({ error: 'Holiday RSVP is not open' })
     }
     const hosted = event.meals.some((m) => m.id === mealId && m.hosted)
@@ -1020,7 +1118,7 @@ app.post('/holiday/rsvps', (req, res) => {
     }
     const db = loadDb()
     const event = normalizeHolidayEvent(db.holiday_event)
-    if (!event.enabled) {
+    if (!event.enabled || holidayHasEnded(event)) {
       return res.status(400).json({ error: 'Holiday RSVP is not open right now' })
     }
     const hostedIds = new Set(event.meals.filter((m) => m.hosted).map((m) => m.id))
@@ -1105,8 +1203,9 @@ app.patch('/admin/holiday', (req, res) => {
     const db = requireAdmin(req, res)
     if (!db) return
     const body = req.body || {}
+    const prev = normalizeHolidayEvent(db.holiday_event)
     const next = normalizeHolidayEvent({
-      ...normalizeHolidayEvent(db.holiday_event),
+      ...prev,
       ...(body.holiday || body),
     })
     if (body.enabled !== undefined) next.enabled = Boolean(body.enabled)
@@ -1121,11 +1220,27 @@ app.patch('/admin/holiday', (req, res) => {
     if (Array.isArray(body.meals)) {
       next.meals = normalizeHolidayEvent({ meals: body.meals }).meals
     }
+    const range = mealDateRange(next.meals)
+    if (body.start_date !== undefined || body.startDate !== undefined) {
+      next.start_date = body.start_date ?? body.startDate ?? range.start_date
+    } else if (!next.start_date) {
+      next.start_date = range.start_date
+    }
+    if (body.end_date !== undefined || body.endDate !== undefined) {
+      next.end_date = body.end_date ?? body.endDate ?? range.end_date
+    } else if (!next.end_date) {
+      next.end_date = range.end_date
+    }
+    if (prev.holiday_id && next.holiday_id && prev.holiday_id !== next.holiday_id) {
+      snapshotHolidayHistory(db, prev, 'switched')
+    }
     db.holiday_event = next
+    ensurePastHolidayHistory(db)
     saveDb(db)
     res.json({
       holiday: next,
       summary: holidaySeatSummary(db, next.holiday_id),
+      holiday_history: db.holiday_history || [],
     })
   } catch (e) {
     console.error(e)
@@ -1311,6 +1426,7 @@ app.post('/admin/unlock', (req, res) => {
       holiday_rsvps: [...(db.holiday_rsvps || [])].sort((a, b) =>
         a.created_at < b.created_at ? 1 : -1,
       ),
+      holiday_history: (ensurePastHolidayHistory(db), db.holiday_history || []),
     })
   }
 
@@ -1357,6 +1473,7 @@ app.post('/admin/unlock', (req, res) => {
     holiday_rsvps: [...(db.holiday_rsvps || [])].sort((a, b) =>
       a.created_at < b.created_at ? 1 : -1,
     ),
+    holiday_history: (ensurePastHolidayHistory(db), db.holiday_history || []),
   })
 })
 

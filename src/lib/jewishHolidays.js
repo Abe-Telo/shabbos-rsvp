@@ -3,7 +3,7 @@
  * https://www.hebcal.com/home/195/jewish-calendar-rest-api
  */
 
-const CACHE_KEY = 'shabbos-jewish-holidays-v2'
+const CACHE_KEY = 'shabbos-jewish-holidays-v3'
 const CACHE_MS = 7 * 24 * 60 * 60 * 1000
 
 const DEFAULT_STATEMENT =
@@ -168,30 +168,76 @@ export function buildHolidayPackages(items) {
     })
   }
 
-  // Sukkot I+II
-  for (const cluster of clusterNearby(
+  // Sukkot first half (I+II) and second half (Shmini Atzeret / Simchat Torah)
+  const sukkotFirstClusters = clusterNearby(
     unusedMatching((it) => /^Sukkot (I|II)$/i.test(it.title)),
     2,
-  )) {
-    pushDayNightPackage({
-      cluster,
-      slug: 'sukkot',
-      kind: 'sukkot',
-      titleFor: (hy) => `Sukkot ${hy}`,
-    })
-  }
-
-  // Shmini Atzeret / Simchat Torah
-  for (const cluster of clusterNearby(
+  )
+  const sukkotLastClusters = clusterNearby(
     unusedMatching((it) => /Shmini Atzeret|Simchat Torah/i.test(it.title)),
     2,
-  )) {
-    pushDayNightPackage({
-      cluster,
-      slug: 'shmini-simchat',
-      kind: 'shmini-simchat',
-      titleFor: (_hy, year) => `Shmini Atzeret / Simchat Torah ${year}`,
+  )
+  const sukkotLastByYear = Object.fromEntries(
+    sukkotLastClusters.map((cluster) => [cluster[0].date.slice(0, 4), cluster]),
+  )
+  for (const first of sukkotFirstClusters) {
+    const year = first[0].date.slice(0, 4)
+    const last = sukkotLastByYear[year]
+    const hy = hebrewYearOf(first[0])
+    markUsed(first)
+    if (last) markUsed(last)
+
+    const firstDays = first.map((it) => it.date)
+    const lastDays = last ? last.map((it) => it.date) : []
+    const firstMeals = slotsForDays(firstDays, { nights: true })
+    const lastMeals = slotsForDays(lastDays, { nights: true }).map((m) => ({
+      ...m,
+      id: `sh-${m.id}`,
+      label: `Second half · ${m.label}`,
+    }))
+
+    if (last) {
+      packages.push({
+        id: holidayKey('sukkot', year),
+        slug: 'sukkot',
+        title: `Sukkot ${hy} (first + second half)`,
+        hebrew_year: first[0].hdate || '',
+        start_date: addDays(firstDays[0], -1),
+        end_date: lastDays[lastDays.length - 1],
+        kind: 'sukkot',
+        meals: [
+          ...firstMeals.map((m) => ({
+            ...m,
+            label: `First half · ${m.label}`,
+          })),
+          ...lastMeals,
+        ],
+      })
+    }
+
+    packages.push({
+      id: holidayKey('sukkot-first', year),
+      slug: 'sukkot-first',
+      title: `Sukkot (first half) ${hy}`,
+      hebrew_year: first[0].hdate || '',
+      start_date: addDays(firstDays[0], -1),
+      end_date: firstDays[firstDays.length - 1],
+      kind: 'sukkot',
+      meals: firstMeals,
     })
+
+    if (last) {
+      packages.push({
+        id: holidayKey('sukkot-last', year),
+        slug: 'sukkot-last',
+        title: `Sukkot (second half) ${hy}`,
+        hebrew_year: last[0].hdate || '',
+        start_date: addDays(lastDays[0], -1),
+        end_date: lastDays[lastDays.length - 1],
+        kind: 'sukkot',
+        meals: lastMeals,
+      })
+    }
   }
 
   // Pesach first days (I+II)
@@ -268,6 +314,8 @@ export function emptyHolidayEvent() {
     holiday_id: null,
     title: '',
     statement: DEFAULT_STATEMENT,
+    start_date: null,
+    end_date: null,
     meals: [],
   }
 }
@@ -278,8 +326,53 @@ export function eventFromPackage(pkg) {
     holiday_id: pkg.id,
     title: pkg.title,
     statement: DEFAULT_STATEMENT,
+    start_date: pkg.start_date || null,
+    end_date: pkg.end_date || null,
     meals: (pkg.meals || []).map((m) => ({ ...m })),
   }
+}
+
+export function mealDateRange(meals) {
+  const dates = (meals || [])
+    .map((m) => String(m?.date || '').trim())
+    .filter(Boolean)
+    .sort()
+  return {
+    start_date: dates[0] || null,
+    end_date: dates[dates.length - 1] || null,
+  }
+}
+
+export function todayIso(fromDate = new Date()) {
+  const y = fromDate.getFullYear()
+  const m = String(fromDate.getMonth() + 1).padStart(2, '0')
+  const day = String(fromDate.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+export function holidayHasEnded(event, fromDate = new Date()) {
+  const end =
+    event?.end_date || mealDateRange(event?.meals || []).end_date || ''
+  return Boolean(end) && String(end) < todayIso(fromDate)
+}
+
+export function titleFromHolidayId(holidayId) {
+  const id = String(holidayId || '')
+  if (!id) return 'Past holiday'
+  const [slug, year] = id.split(/-(?=\d{4}$)/)
+  const names = {
+    'rosh-hashana': 'Rosh Hashanah',
+    'yom-kippur': 'Yom Kippur',
+    sukkot: 'Sukkot',
+    'sukkot-first': 'Sukkot (first half)',
+    'sukkot-last': 'Sukkot (second half)',
+    'shmini-simchat': 'Shmini Atzeret / Simchat Torah',
+    'pesach-first': 'Pesach (first days)',
+    'pesach-last': 'Pesach (last days)',
+    shavuot: 'Shavuot',
+  }
+  const name = names[slug] || slug.replace(/-/g, ' ')
+  return year ? `${name} ${year}` : name
 }
 
 function loadCache() {
@@ -329,15 +422,12 @@ export async function fetchHolidayCatalog({
 }
 
 export function upcomingPackages(packages, fromDate = new Date()) {
-  const today = formatDateLocal(fromDate)
+  const today = todayIso(fromDate)
   return (packages || []).filter((p) => String(p.end_date || '') >= today)
 }
 
 function formatDateLocal(d) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return todayIso(d)
 }
 
 export function mealPublicView(meal) {

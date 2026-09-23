@@ -785,11 +785,15 @@ export default function HolidayPage() {
         <>
           {step === STEPS.closed && (
             <div className="panel">
-              <h2>No holiday RSVP open</h2>
+              <h2>
+                {holiday?.ended
+                  ? `${holiday.title || 'This holiday'} has ended`
+                  : 'No holiday RSVP open'}
+              </h2>
               <p className="hint">
-                The regular Shabbos form is still available. When the host
-                enables a holiday (like Rosh Hashanah), you&apos;ll RSVP for
-                night and day meals here.
+                {holiday?.ended
+                  ? 'RSVPs reset after each holiday. The host will open the next one (for Sukkot: first half, second half, or both) in Admin.'
+                  : 'The regular Shabbos form is still available. When the host enables a holiday, you will RSVP for night and day meals here.'}
               </p>
               <div className="actions">
                 <Link className="btn btn-primary" to="/">

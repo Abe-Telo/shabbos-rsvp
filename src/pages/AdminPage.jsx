@@ -22,6 +22,8 @@ import {
   eventFromPackage,
   fetchHolidayCatalog,
   formatMealLabel,
+  holidayHasEnded,
+  titleFromHolidayId,
   upcomingPackages,
 } from '../lib/jewishHolidays'
 import { currentSunday, formatWeekLabel } from '../lib/week'
@@ -455,6 +457,9 @@ export default function AdminPage() {
   const [shabbosSub, setShabbosSub] = useState('rsvps')
   const [holidaySub, setHolidaySub] = useState('setup')
   const [holidayMealFilter, setHolidayMealFilter] = useState('all')
+  const [pastHolidayId, setPastHolidayId] = useState('')
+  const [holidayHistory, setHolidayHistory] = useState([])
+  const [holidayCatalogAll, setHolidayCatalogAll] = useState([])
   const [contactsSub, setContactsSub] = useState('sheet')
   const [historyPerson, setHistoryPerson] = useState(null)
   const [guestLimitDraft, setGuestLimitDraft] = useState('')
@@ -465,6 +470,8 @@ export default function AdminPage() {
     holiday_id: null,
     title: '',
     statement: defaultHolidayStatement(),
+    start_date: null,
+    end_date: null,
     meals: [],
   })
   const [holidayRsvps, setHolidayRsvps] = useState([])
@@ -519,9 +526,12 @@ export default function AdminPage() {
         holiday_id: he.holiday_id || null,
         title: he.title || '',
         statement: he.statement || defaultHolidayStatement(),
+        start_date: he.start_date || null,
+        end_date: he.end_date || null,
         meals: Array.isArray(he.meals) ? he.meals : [],
       })
       setHolidayRsvps(data.holiday_rsvps || [])
+      setHolidayHistory(data.holiday_history || [])
       if (he.enabled) setMainTab('holiday')
       setUnlocked(true)
     } catch (e) {
@@ -546,7 +556,10 @@ export default function AdminPage() {
       try {
         // force:true clears the bad v1 cache that merged 10 years of RH into one list
         const packages = await fetchHolidayCatalog({ force: true })
-        if (!cancelled) setHolidayCatalog(upcomingPackages(packages))
+        if (!cancelled) {
+          setHolidayCatalogAll(packages)
+          setHolidayCatalog(upcomingPackages(packages))
+        }
       } catch {
         if (!cancelled) setHolidayCatalog([])
       } finally {
@@ -586,9 +599,12 @@ export default function AdminPage() {
       holiday_id: null,
       title: '',
       statement: defaultHolidayStatement(),
+      start_date: null,
+      end_date: null,
       meals: [],
     })
     setHolidayRsvps([])
+    setHolidayHistory([])
     setHolidayMsg('')
   }
 
@@ -618,30 +634,33 @@ export default function AdminPage() {
   }
 
   function applyHolidayPackage(packageId) {
-    const pkg = holidayCatalog.find((p) => p.id === packageId)
+    const pkg =
+      holidayCatalog.find((p) => p.id === packageId) ||
+      holidayCatalogAll.find((p) => p.id === packageId)
     if (!pkg) return
     const next = eventFromPackage(pkg)
-    setHolidayDraft((prev) => ({
-      ...next,
-      enabled: prev.enabled,
-      // Keep custom statement if they already edited it for this save session
-      statement:
-        prev.holiday_id === next.holiday_id && prev.statement
-          ? prev.statement
-          : next.statement,
-      // Always take the package meal list (4 for RH) — don't keep leftover old slots
-      meals: next.meals.map((m) => {
-        const old = (prev.meals || []).find((x) => x.id === m.id)
-        if (!old) return m
-        return {
-          ...m,
-          hosted: old.hosted !== false,
-          host_name: old.host_name || '',
-          address: old.address || '',
-          notes: old.notes || '',
-        }
-      }),
-    }))
+    setHolidayDraft((prev) => {
+      const sameHoliday = prev.holiday_id === next.holiday_id
+      return {
+        ...next,
+        enabled: prev.enabled,
+        statement:
+          sameHoliday && prev.statement ? prev.statement : next.statement,
+        meals: next.meals.map((m) => {
+          if (!sameHoliday) return m
+          const old = (prev.meals || []).find((x) => x.id === m.id)
+          if (!old) return m
+          return {
+            ...m,
+            hosted: old.hosted !== false,
+            host_name: old.host_name || '',
+            address: old.address || '',
+            notes: old.notes || '',
+          }
+        }),
+      }
+    })
+    setHolidayMealFilter('all')
   }
 
   function updateMeal(idx, patch) {
@@ -662,6 +681,8 @@ export default function AdminPage() {
         holiday_id: holidayDraft.holiday_id,
         title: holidayDraft.title,
         statement: holidayDraft.statement,
+        start_date: holidayDraft.start_date,
+        end_date: holidayDraft.end_date,
         meals: holidayDraft.meals,
       })
       const he = body.holiday || holidayDraft
@@ -670,8 +691,11 @@ export default function AdminPage() {
         holiday_id: he.holiday_id || null,
         title: he.title || '',
         statement: he.statement || defaultHolidayStatement(),
+        start_date: he.start_date || holidayDraft.start_date || null,
+        end_date: he.end_date || holidayDraft.end_date || null,
         meals: Array.isArray(he.meals) ? he.meals : [],
       })
+      if (body.holiday_history) setHolidayHistory(body.holiday_history)
       setHolidayMsg(
         he.enabled
           ? `Holiday mode ON — ${he.title || 'event'} is live on the Holiday tab.`
@@ -685,7 +709,10 @@ export default function AdminPage() {
     }
   }
 
-  function exportHolidayCsv() {
+  function exportHolidayCsv(rows, filenameId) {
+    const list =
+      rows ||
+      holidayRsvps.filter((r) => r.holiday_id === holidayDraft.holiday_id)
     const header = [
       'holiday_id',
       'full_name',
@@ -702,7 +729,7 @@ export default function AdminPage() {
       'created_at',
     ]
     const lines = [header.join(',')]
-    for (const r of holidayRsvps) {
+    for (const r of list) {
       const guests = r.guests || []
       lines.push(
         [
@@ -728,7 +755,10 @@ export default function AdminPage() {
           .join(','),
       )
     }
-    downloadCsv(`holiday-rsvps-${holidayDraft.holiday_id || 'event'}.csv`, lines)
+    downloadCsv(
+      `holiday-rsvps-${filenameId || holidayDraft.holiday_id || 'event'}.csv`,
+      lines,
+    )
   }
 
   const thisWeekSeatCount = useMemo(
@@ -870,10 +900,61 @@ export default function AdminPage() {
       }))
   }, [rows])
 
+  const pastHolidayGroups = useMemo(() => {
+    const currentId = holidayDraft.holiday_id
+    const byId = new Map()
+    for (const r of holidayRsvps) {
+      const id = r.holiday_id || 'unknown'
+      if (id === currentId && !holidayHasEnded(holidayDraft)) continue
+      if (!byId.has(id)) byId.set(id, [])
+      byId.get(id).push(r)
+    }
+    return [...byId.entries()]
+      .map(([id, rsvps]) => {
+        const hist = holidayHistory.find((h) => h.holiday_id === id)
+        const pkg = holidayCatalogAll.find((p) => p.id === id)
+        const fromRsvps = [
+          ...new Set(rsvps.flatMap((r) => r.meals || [])),
+        ].map((mealId) => ({
+          id: mealId,
+          label: mealId,
+          hosted: true,
+        }))
+        return {
+          id,
+          title: hist?.title || pkg?.title || titleFromHolidayId(id),
+          meals: hist?.meals?.length
+            ? hist.meals
+            : pkg?.meals?.length
+              ? pkg.meals
+              : fromRsvps,
+          rsvps,
+        }
+      })
+      .sort((a, b) => String(b.id).localeCompare(String(a.id)))
+  }, [
+    holidayRsvps,
+    holidayDraft,
+    holidayHistory,
+    holidayCatalogAll,
+  ])
+
+  const viewingPast = holidaySub === 'past'
+  const activePast =
+    pastHolidayGroups.find((g) => g.id === pastHolidayId) ||
+    pastHolidayGroups[0] ||
+    null
+  const activeHolidayMeals = viewingPast
+    ? activePast?.meals || []
+    : holidayDraft.meals || []
+  const activeHolidayRsvps = viewingPast
+    ? activePast?.rsvps || []
+    : holidayRsvps.filter((r) => r.holiday_id === holidayDraft.holiday_id)
+
   const holidayMealSummary = useMemo(() => {
-    const meals = holidayDraft.meals || []
+    const meals = activeHolidayMeals
     const idsInRsvps = new Set(
-      holidayRsvps.flatMap((r) => [
+      activeHolidayRsvps.flatMap((r) => [
         ...(r.meals || []),
         ...(r.guests || []).flatMap((g) => g.meals || []),
       ]),
@@ -883,7 +964,7 @@ export default function AdminPage() {
       .map((m) => {
         let people = 0
         let guests = 0
-        for (const r of holidayRsvps) {
+        for (const r of activeHolidayRsvps) {
           if ((r.meals || []).includes(m.id)) people += 1
           for (const g of r.guests || []) {
             if ((g.meals || []).includes(m.id)) {
@@ -899,18 +980,18 @@ export default function AdminPage() {
           total: people + guests,
         }
       })
-  }, [holidayDraft.meals, holidayRsvps])
+  }, [activeHolidayMeals, activeHolidayRsvps])
 
   const holidayRsvpSheet = useMemo(() => {
     const mealById = Object.fromEntries(
-      (holidayDraft.meals || []).map((m) => [m.id, m]),
+      (activeHolidayMeals || []).map((m) => [m.id, m]),
     )
     const labelOf = (id) => mealById[id]?.label || id
 
     const list =
       holidayMealFilter === 'all'
-        ? holidayRsvps
-        : holidayRsvps.filter((r) =>
+        ? activeHolidayRsvps
+        : activeHolidayRsvps.filter((r) =>
             (r.meals || []).includes(holidayMealFilter),
           )
 
@@ -963,7 +1044,7 @@ export default function AdminPage() {
           row.guest_count = String(guestCount)
           row.seats = String(1 + guestCount)
         } else {
-          for (const m of holidayDraft.meals || []) {
+          for (const m of activeHolidayMeals || []) {
             const coming = (r.meals || []).includes(m.id)
             row[`meal_${m.id}`] = coming ? 'Yes' : '—'
             const gFor = (r.guests || []).filter((g) =>
@@ -987,7 +1068,7 @@ export default function AdminPage() {
 
         return row
       })
-  }, [holidayDraft.meals, holidayRsvps, holidayMealFilter])
+  }, [activeHolidayMeals, activeHolidayRsvps, holidayMealFilter])
 
   const holidayRsvpColumns = useMemo(() => {
     if (holidayMealFilter !== 'all') {
@@ -1110,13 +1191,20 @@ export default function AdminPage() {
                 Download Google Sheet CSV
               </button>
             )}
-            {mainTab === 'holiday' && holidayRsvps.length > 0 && (
+            {mainTab === 'holiday' && activeHolidayRsvps.length > 0 && (
               <button
                 type="button"
                 className="btn btn-accent"
-                onClick={exportHolidayCsv}
+                onClick={() =>
+                  exportHolidayCsv(
+                    activeHolidayRsvps,
+                    viewingPast
+                      ? activePast?.id
+                      : holidayDraft.holiday_id,
+                  )
+                }
               >
-                Export holiday CSV
+                Export {viewingPast ? 'past' : 'holiday'} CSV
               </button>
             )}
           </div>
@@ -1129,7 +1217,9 @@ export default function AdminPage() {
             >
               Holiday
               {holidayDraft.enabled ? ' · on' : ''}
-              {holidayRsvps.length ? ` (${holidayRsvps.length})` : ''}
+              {activeHolidayRsvps.length && holidaySub !== 'past'
+                ? ` (${activeHolidayRsvps.length})`
+                : ''}
             </button>
             <button
               type="button"
@@ -1159,9 +1249,31 @@ export default function AdminPage() {
               <button
                 type="button"
                 className={`btn ${holidaySub === 'rsvps' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setHolidaySub('rsvps')}
+                onClick={() => {
+                  setHolidaySub('rsvps')
+                  setHolidayMealFilter('all')
+                }}
               >
-                RSVPs ({holidayRsvps.length})
+                RSVPs (
+                {
+                  holidayRsvps.filter(
+                    (r) => r.holiday_id === holidayDraft.holiday_id,
+                  ).length
+                }
+                )
+              </button>
+              <button
+                type="button"
+                className={`btn ${holidaySub === 'past' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => {
+                  setHolidaySub('past')
+                  setHolidayMealFilter('all')
+                  if (!pastHolidayId && pastHolidayGroups[0]) {
+                    setPastHolidayId(pastHolidayGroups[0].id)
+                  }
+                }}
+              >
+                Past ({pastHolidayGroups.reduce((n, g) => n + g.rsvps.length, 0)})
               </button>
             </div>
           )}
@@ -1225,9 +1337,10 @@ export default function AdminPage() {
             <div className="panel">
               <h2>Holiday setup</h2>
               <p className="hint">
-                Turns on the <strong>Holiday</strong> tab. Guests pick night/day
-                meals; addresses stay hidden until after they submit. Calendar
-                from Hebcal (next 10 years).
+                Turns on the <strong>Holiday</strong> tab. Switching to a new
+                holiday archives the old RSVPs under <strong>Past</strong> and
+                starts a fresh list. For Sukkot, pick first half, second half,
+                or both.
               </p>
 
               <div className="field">
@@ -1264,6 +1377,16 @@ export default function AdminPage() {
                       {p.title} ({p.start_date} → {p.end_date})
                     </option>
                   ))}
+                  {holidayDraft.holiday_id &&
+                    !holidayCatalog.some(
+                      (p) => p.id === holidayDraft.holiday_id,
+                    ) && (
+                      <option value={holidayDraft.holiday_id}>
+                        {holidayDraft.title ||
+                          titleFromHolidayId(holidayDraft.holiday_id)}{' '}
+                        (current)
+                      </option>
+                    )}
                 </select>
                 {!catalogLoading && holidayCatalog.length === 0 && (
                   <p className="hint" style={{ marginTop: '0.4rem' }}>
@@ -1397,17 +1520,49 @@ export default function AdminPage() {
             </div>
           )}
 
-          {mainTab === 'holiday' && holidaySub === 'rsvps' && (
+          {mainTab === 'holiday' &&
+            (holidaySub === 'rsvps' || holidaySub === 'past') && (
             <div className="panel">
               <h2>
-                Holiday RSVPs
-                {holidayDraft.title ? ` — ${holidayDraft.title}` : ''}
+                {holidaySub === 'past' ? 'Past holiday RSVPs' : 'Holiday RSVPs'}
+                {holidaySub === 'past'
+                  ? activePast
+                    ? ` — ${activePast.title}`
+                    : ''
+                  : holidayDraft.title
+                    ? ` — ${holidayDraft.title}`
+                    : ''}
               </h2>
               <p className="hint">
-                Filter by meal, then scan the sheet — every answer is a column
-                (Yes / No / — so blanks are obvious). Scroll sideways on small
-                screens.
+                {holidaySub === 'past'
+                  ? 'Archived answers from holidays that already ended or were switched out. Current Sukkot RSVPs stay on the RSVPs tab.'
+                  : 'This list resets when you switch holidays. Older RSVPs move to Past. Filter by meal, then scan the sheet.'}
               </p>
+
+              {holidaySub === 'past' && (
+                <div className="nav" style={{ marginBottom: '0.85rem' }}>
+                  {pastHolidayGroups.length === 0 && (
+                    <p className="meta">No past holiday RSVPs yet.</p>
+                  )}
+                  {pastHolidayGroups.map((g) => (
+                    <button
+                      type="button"
+                      key={g.id}
+                      className={`btn ${
+                        (pastHolidayId || pastHolidayGroups[0]?.id) === g.id
+                          ? 'btn-primary'
+                          : 'btn-ghost'
+                      }`}
+                      onClick={() => {
+                        setPastHolidayId(g.id)
+                        setHolidayMealFilter('all')
+                      }}
+                    >
+                      {g.title} ({g.rsvps.length})
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="nav" style={{ marginBottom: '0.85rem' }}>
                 <button
@@ -1415,7 +1570,7 @@ export default function AdminPage() {
                   className={`btn ${holidayMealFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`}
                   onClick={() => setHolidayMealFilter('all')}
                 >
-                  All ({holidayRsvps.length})
+                  All ({activeHolidayRsvps.length})
                 </button>
                 {holidayMealSummary.map((m) => (
                   <button
