@@ -629,26 +629,17 @@ function FoodTab({
         listed.
       </p>
 
-      <div className="nav holiday-food-meal-nav" style={{ marginBottom: '1rem' }}>
-        {hostedMeals.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            className={`btn ${
-              (foodMealId || hostedMeals[0]?.id) === m.id
-                ? 'btn-primary'
-                : 'btn-ghost'
-            }`}
-            onClick={() => setFoodMealId(m.id)}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      <MealCalendarNav
+        meals={hostedMeals}
+        selectedId={foodMealId || hostedMeals[0]?.id}
+        onSelect={setFoodMealId}
+      />
 
-      <div className="meta" style={{ marginBottom: '0.75rem' }}>
-        {activeMeal ? formatMealLabel(activeMeal) : ''}
-      </div>
+      {activeMeal && (
+        <div className="holiday-food-selected">
+          <MealSittingHeading meal={activeMeal} hostedMeals={hostedMeals} />
+        </div>
+      )}
 
       <div className="field">
         <label>Your name (for covering items)</label>
@@ -950,6 +941,79 @@ function MealCalendarPicker({
                             {shortMealName(m)}
                           </span>
                         </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MealCalendarNav({ meals, selectedId, onSelect }) {
+  const groups = groupMealsForCalendar(meals)
+  return (
+    <div className="meal-cal meal-cal-nav">
+      {groups.map((group) => (
+        <div key={group.id} className="meal-cal-half">
+          {group.title && <h3>{group.title}</h3>}
+          <div
+            className="meal-cal-week"
+            aria-label={group.title || 'Meal days'}
+          >
+            {group.days.map((day) => {
+              const parts = calendarDayParts(
+                day.date,
+                day.meals[0]?.date_label || '',
+              )
+              const note = occasionForDate(day.date)
+              const both = day.meals.length > 1
+              const picked = day.meals.some((m) => m.id === selectedId)
+              return (
+                <div
+                  key={day.date}
+                  className={`meal-cal-day${both ? ' has-both' : ''}${
+                    picked ? ' is-picked' : ''
+                  }`}
+                >
+                  <div className="meal-cal-day-head">
+                    <div className="meal-cal-when">
+                      <span className="meal-cal-dow">{parts.dow}</span>
+                      <span className="meal-cal-num">{parts.day}</span>
+                      <span className="meal-cal-mon">{parts.month}</span>
+                    </div>
+                    {note && <strong>{note}</strong>}
+                  </div>
+                  <div className="meal-cal-options">
+                    {day.meals.map((m) => {
+                      const period = mealPeriod(m.id, meals) || 'day'
+                      const on = selectedId === m.id
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          className={`meal-cal-opt ${period}${on ? ' is-on' : ''}`}
+                          aria-pressed={on}
+                          onClick={() => onSelect(m.id)}
+                        >
+                          <span className="coming-meal-num">
+                            {mealNumber(m.id, meals)}
+                          </span>
+                          <span className={`meal-cal-opt-icon ${period}`}>
+                            {period === 'night' ? (
+                              <NightIcon size={14} />
+                            ) : (
+                              <SunIcon size={14} />
+                            )}
+                          </span>
+                          <span className="meal-cal-opt-text">
+                            {period === 'night' ? 'Night' : 'Day'}
+                          </span>
+                        </button>
                       )
                     })}
                   </div>
