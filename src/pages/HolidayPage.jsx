@@ -710,6 +710,159 @@ function mealHalfKey(meal) {
   return 'all'
 }
 
+function shortMealName(meal) {
+  const raw = String(meal?.label || '').replace(
+    /^(First half|Second half)\s*[·•\-]\s*/i,
+    '',
+  )
+  if (/^night\s*\d*$/i.test(raw)) return raw.replace(/night/i, 'Night')
+  if (/^day\s*\d*$/i.test(raw)) return raw.replace(/day/i, 'Day')
+  return raw || 'Meal'
+}
+
+function calendarDayParts(iso, fallback = '') {
+  try {
+    const d = new Date(`${iso}T12:00:00`)
+    if (Number.isNaN(d.getTime())) throw new Error('bad date')
+    return {
+      dow: d.toLocaleDateString(undefined, { weekday: 'short' }),
+      day: String(d.getDate()),
+      month: d.toLocaleDateString(undefined, { month: 'short' }),
+    }
+  } catch {
+    const bits = String(fallback).split(/[,\s]+/).filter(Boolean)
+    return { dow: bits[0] || '', day: bits[bits.length - 1] || '', month: bits[1] || '' }
+  }
+}
+
+function occasionForDate(iso) {
+  return SUKKOT_5787_CALENDAR.days.find((d) => d.date === iso)?.note || ''
+}
+
+function groupMealsForCalendar(meals) {
+  const halves = [
+    { id: 'first', title: 'First half' },
+    { id: 'second', title: 'Second half' },
+    { id: 'all', title: '' },
+  ]
+  return halves
+    .map((half) => {
+      const inHalf = (meals || []).filter((m) => mealHalfKey(m) === half.id)
+      const byDate = new Map()
+      for (const m of inHalf) {
+        const key = m.date || m.id
+        if (!byDate.has(key)) byDate.set(key, [])
+        byDate.get(key).push(m)
+      }
+      const days = [...byDate.entries()]
+        .sort(([a], [b]) => String(a).localeCompare(String(b)))
+        .map(([date, items]) => {
+          const sorted = [...items].sort((a, b) => {
+            const pa = mealPeriod(a.id, meals) === 'night' ? 1 : 0
+            const pb = mealPeriod(b.id, meals) === 'night' ? 1 : 0
+            return pa - pb
+          })
+          return { date, meals: sorted }
+        })
+      return { ...half, days }
+    })
+    .filter((half) => half.days.length)
+}
+
+function MealCalendarPicker({
+  meals,
+  selectedMeals,
+  cantMakeIt,
+  onToggle,
+  onCantMakeIt,
+}) {
+  const groups = groupMealsForCalendar(meals)
+  return (
+    <div className="meal-cal">
+      <label className={`meal-cal-skip${cantMakeIt ? ' is-on' : ''}`}>
+        <input
+          type="checkbox"
+          checked={cantMakeIt}
+          onChange={(e) => onCantMakeIt(e.target.checked)}
+        />
+        <span>
+          <strong>Can&apos;t make it</strong>
+          <em>Cancel after already RSVPing</em>
+        </span>
+      </label>
+
+      {groups.map((group) => (
+        <div key={group.id} className="meal-cal-half">
+          {group.title && <h3>{group.title}</h3>}
+          <div
+            className="meal-cal-week"
+            aria-label={group.title || 'Meal days'}
+          >
+            {group.days.map((day) => {
+              const parts = calendarDayParts(
+                day.date,
+                day.meals[0]?.date_label || '',
+              )
+              const note = occasionForDate(day.date)
+              const picked = day.meals.some((m) => selectedMeals.includes(m.id))
+              const both = day.meals.length > 1
+              return (
+                <div
+                  key={day.date}
+                  className={`meal-cal-day${both ? ' has-both' : ''}${
+                    picked && !cantMakeIt ? ' is-picked' : ''
+                  }${cantMakeIt ? ' is-dim' : ''}`}
+                >
+                  <div className="meal-cal-day-head">
+                    <div className="meal-cal-when">
+                      <span className="meal-cal-dow">{parts.dow}</span>
+                      <span className="meal-cal-num">{parts.day}</span>
+                      <span className="meal-cal-mon">{parts.month}</span>
+                    </div>
+                    {note && <strong>{note}</strong>}
+                  </div>
+                  <div className="meal-cal-options">
+                    {day.meals.map((m) => {
+                      const period = mealPeriod(m.id, meals) || 'day'
+                      const checked =
+                        !cantMakeIt && selectedMeals.includes(m.id)
+                      return (
+                        <label
+                          key={m.id}
+                          className={`meal-cal-opt ${period}${
+                            checked ? ' is-on' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={cantMakeIt}
+                            onChange={() => onToggle(m.id)}
+                          />
+                          <span className={`meal-cal-opt-icon ${period}`}>
+                            {period === 'night' ? (
+                              <NightIcon size={16} />
+                            ) : (
+                              <SunIcon size={16} />
+                            )}
+                          </span>
+                          <span className="meal-cal-opt-text">
+                            {shortMealName(m)}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function HolidaySubmissionSummary({ rsvp, hostedMeals, addresses = [] }) {
   if (!rsvp) return null
   const declined = rsvp.coming === 'no' || !(rsvp.meals || []).length
@@ -1417,33 +1570,19 @@ export default function HolidayPage() {
                 <label>
                   Meals <span className="req">*</span>
                 </label>
-                <div className="choices">
-                  <label className="choice">
-                    <input
-                      type="checkbox"
-                      checked={cantMakeIt}
-                      onChange={(e) => {
-                        if (e.target.checked) chooseCantMakeIt()
-                        else setCantMakeIt(false)
-                      }}
-                    />
-                    <span>Can&apos;t make it</span>
-                  </label>
-                  {hostedMeals.map((m) => (
-                    <label className="choice" key={m.id}>
-                      <input
-                        type="checkbox"
-                        checked={!cantMakeIt && selectedMeals.includes(m.id)}
-                        disabled={cantMakeIt}
-                        onChange={() => toggleId(m.id, setSelectedMeals)}
-                      />
-                      <span>{formatMealLabel(m)}</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="hint" style={{ marginTop: '0.4rem' }}>
-                  Choose Can&apos;t make it if you need to cancel after already
-                  RSVPing.
+                <MealCalendarPicker
+                  meals={hostedMeals}
+                  selectedMeals={selectedMeals}
+                  cantMakeIt={cantMakeIt}
+                  onToggle={(id) => toggleId(id, setSelectedMeals)}
+                  onCantMakeIt={(on) => {
+                    if (on) chooseCantMakeIt()
+                    else setCantMakeIt(false)
+                  }}
+                />
+                <p className="hint" style={{ marginTop: '0.55rem' }}>
+                  Sun is day / lunch. Moon is night / dinner. Saturday boxes
+                  hold both sittings.
                 </p>
               </div>
               {!hostedMeals.length && (
