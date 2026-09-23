@@ -38,16 +38,16 @@ const SUKKOT_5787_CALENDAR = {
   intro:
     'The upcoming Yom Tov begins Friday evening, September 25, and ends Sunday night, October 4, 2026. For hosting, there are two halves of Yom Tov, each with four main meals.',
   days: [
-    { date: '2026-09-25', label: 'Fri 25', kind: 'yomtov', note: 'Erev Sukkos' },
-    { date: '2026-09-26', label: 'Sat 26', kind: 'yomtov', note: 'Sukkos 1 / Shabbos' },
-    { date: '2026-09-27', label: 'Sun 27', kind: 'yomtov', note: 'Sukkos 2' },
-    { date: '2026-09-28', label: 'Mon 28', kind: 'chol', note: 'Chol Hamoed' },
-    { date: '2026-09-29', label: 'Tue 29', kind: 'chol', note: 'Chol Hamoed' },
-    { date: '2026-09-30', label: 'Wed 30', kind: 'chol', note: 'Chol Hamoed' },
-    { date: '2026-10-01', label: 'Thu 1', kind: 'chol', note: 'Chol Hamoed' },
-    { date: '2026-10-02', label: 'Fri 2', kind: 'yomtov', note: 'Hoshana Rabbah / SA night' },
-    { date: '2026-10-03', label: 'Sat 3', kind: 'yomtov', note: 'Shemini Atzeres / ST night' },
-    { date: '2026-10-04', label: 'Sun 4', kind: 'yomtov', note: 'Simchas Torah' },
+    { date: '2026-09-25', label: 'Fri 25', kind: 'yomtov', note: 'Erev Sukkos', mealIds: ['n1'] },
+    { date: '2026-09-26', label: 'Sat 26', kind: 'yomtov', note: 'Sukkos 1 / Shabbos', mealIds: ['d1', 'n2'] },
+    { date: '2026-09-27', label: 'Sun 27', kind: 'yomtov', note: 'Sukkos 2', mealIds: ['d2'] },
+    { date: '2026-09-28', label: 'Mon 28', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-09-29', label: 'Tue 29', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-09-30', label: 'Wed 30', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-10-01', label: 'Thu 1', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-10-02', label: 'Fri 2', kind: 'yomtov', note: 'Hoshana Rabbah / SA night', mealIds: ['sh-n1'] },
+    { date: '2026-10-03', label: 'Sat 3', kind: 'yomtov', note: 'Shemini Atzeres / ST night', mealIds: ['sh-d1', 'sh-n2'] },
+    { date: '2026-10-04', label: 'Sun 4', kind: 'yomtov', note: 'Simchas Torah', mealIds: ['sh-d2'] },
   ],
   halves: [
     {
@@ -117,7 +117,46 @@ function PaymentBlock() {
   )
 }
 
-function CalendarTab({ holiday }) {
+function dayCounts(day, summary, hostedMeals) {
+  const byId = Object.fromEntries(
+    (summary?.meals || []).map((m) => [m.meal_id, m]),
+  )
+  const ids =
+    day.mealIds ||
+    (hostedMeals || [])
+      .filter((m) => m.date === day.date)
+      .map((m) => m.id)
+  let registered = 0
+  let guests = 0
+  for (const id of ids) {
+    const row = byId[id]
+    if (!row) continue
+    registered += Number(row.self_count) || 0
+    guests += Number(row.guest_count) || 0
+  }
+  return { registered, guests, total: registered + guests }
+}
+
+function CalendarCounts({ registered, guests, total }) {
+  return (
+    <div className="holiday-cal-counts">
+      <span>
+        <em>{registered}</em>
+        Reg
+      </span>
+      <span>
+        <em>{guests}</em>
+        Guests
+      </span>
+      <span>
+        <em>{total}</em>
+        Total
+      </span>
+    </div>
+  )
+}
+
+function CalendarTab({ holiday, summary, hostedMeals }) {
   const showSukkot =
     String(holiday?.holiday_id || '').includes('sukkot') ||
     /sukko/i.test(holiday?.title || '')
@@ -162,15 +201,22 @@ function CalendarTab({ holiday }) {
       <p>{cal.intro}</p>
 
       <div className="holiday-cal-strip" aria-label="Sukkos calendar">
-        {cal.days.map((d) => (
-          <div
-            key={d.date}
-            className={`holiday-cal-day holiday-cal-day-${d.kind}`}
-          >
-            <strong>{d.label}</strong>
-            <span>{d.note}</span>
-          </div>
-        ))}
+        {cal.days.map((d) => {
+          const counts = dayCounts(d, summary, hostedMeals)
+          const hasMeals = (d.mealIds || []).length > 0
+          return (
+            <div
+              key={d.date}
+              className={`holiday-summary-card holiday-cal-card ${
+                d.kind === 'yomtov' && hasMeals ? 'is-coming' : 'is-out'
+              }`}
+            >
+              <div className="holiday-summary-when">{d.label}</div>
+              <strong>{d.note}</strong>
+              <CalendarCounts {...counts} />
+            </div>
+          )
+        })}
       </div>
 
       {cal.halves.map((half) => (
@@ -1028,7 +1074,11 @@ export default function HolidayPage() {
       )}
 
       {mainTab === 'calendar' && holiday?.enabled && (
-        <CalendarTab holiday={holiday} />
+        <CalendarTab
+          holiday={holiday}
+          summary={summary}
+          hostedMeals={hostedMeals}
+        />
       )}
 
       {mainTab === 'food' && holiday?.enabled && (
