@@ -624,6 +624,59 @@ select {
   min-height: 7.4rem;
 }
 
+.holiday-cal-card.has-both {
+  min-height: 9.2rem;
+}
+
+.holiday-cal-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.holiday-cal-card-head .holiday-summary-when {
+  margin-bottom: 0;
+}
+
+.holiday-cal-icons {
+  display: flex;
+  align-items: center;
+  gap: 0.18rem;
+  flex-shrink: 0;
+}
+
+.holiday-cal-icon {
+  display: block;
+}
+
+.holiday-cal-icon.sun {
+  color: #c45c26;
+}
+
+.holiday-cal-icon.night {
+  color: #2f3d6b;
+}
+
+.holiday-cal-sittings {
+  margin-top: auto;
+}
+
+.holiday-cal-sitting {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.28rem;
+}
+
+.holiday-cal-sitting .holiday-cal-counts {
+  flex: 1;
+  padding-top: 0.4rem;
+}
+
+.holiday-cal-sitting + .holiday-cal-sitting .holiday-cal-counts {
+  padding-top: 0.28rem;
+}
+
 .holiday-cal-card strong {
   font-size: 0.92rem;
   line-height: 1.3;

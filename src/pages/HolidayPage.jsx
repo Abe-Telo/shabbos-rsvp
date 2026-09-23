@@ -117,13 +117,26 @@ function PaymentBlock() {
   )
 }
 
-function dayCounts(day, summary, hostedMeals) {
-  const ids = new Set(
+function mealPeriod(id, hostedMeals) {
+  const match = (hostedMeals || []).find((m) => m.id === id)
+  if (match?.period === 'night' || match?.period === 'day') return match.period
+  const s = String(id || '')
+  if (/(^|-)n\d+$/i.test(s)) return 'night'
+  if (/(^|-)d\d+$/i.test(s)) return 'day'
+  return null
+}
+
+function dayMealIds(day, hostedMeals) {
+  return (
     day.mealIds ||
-      (hostedMeals || [])
-        .filter((m) => m.date === day.date)
-        .map((m) => m.id),
+    (hostedMeals || [])
+      .filter((m) => m.date === day.date)
+      .map((m) => m.id)
   )
+}
+
+function dayCounts(mealIds, summary) {
+  const ids = new Set(mealIds || [])
   let registered = 0
   let guests = 0
   for (const p of summary?.people || []) {
@@ -139,6 +152,56 @@ function dayCounts(day, summary, hostedMeals) {
     guests += peak
   }
   return { registered, guests, total: registered + guests }
+}
+
+function SunIcon({ size = 18 }) {
+  return (
+    <svg
+      className="holiday-cal-icon sun"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="4" fill="currentColor" />
+      <g
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      >
+        <path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M5.2 18.8l1.7-1.7M17.1 6.9l1.7-1.7" />
+      </g>
+    </svg>
+  )
+}
+
+function NightIcon({ size = 18 }) {
+  return (
+    <svg
+      className="holiday-cal-icon night"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        fill="currentColor"
+        d="M15.1 3.4a8.4 8.4 0 1 0 5.5 14.6 8.8 8.8 0 0 1-5.5-14.6z"
+      />
+    </svg>
+  )
+}
+
+function CalendarMealIcons({ hasDay, hasNight }) {
+  if (!hasDay && !hasNight) return null
+  const label = hasDay && hasNight ? 'Day and night meals' : hasDay ? 'Day meal' : 'Night meal'
+  return (
+    <div className="holiday-cal-icons" aria-label={label} title={label}>
+      {hasDay && <SunIcon />}
+      {hasNight && <NightIcon />}
+    </div>
+  )
 }
 
 function CalendarCounts({ registered, guests, total }) {
@@ -205,24 +268,50 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
       <p>{cal.intro}</p>
 
       <p className="hint">
-        Day counts are unique people (same as Who&apos;s coming). Lunch and
-        dinner on the same date are not added together.
+        Sun is a day meal. Moon is a night meal. Days with lunch and dinner
+        show both icons, with a count for each sitting.
       </p>
 
       <div className="holiday-cal-strip" aria-label="Sukkos calendar">
         {cal.days.map((d) => {
-          const counts = dayCounts(d, summary, hostedMeals)
-          const hasMeals = (d.mealIds || []).length > 0
+          const ids = dayMealIds(d, hostedMeals)
+          const dayIds = ids.filter((id) => mealPeriod(id, hostedMeals) === 'day')
+          const nightIds = ids.filter(
+            (id) => mealPeriod(id, hostedMeals) === 'night',
+          )
+          const hasDay = dayIds.length > 0
+          const hasNight = nightIds.length > 0
+          const hasBoth = hasDay && hasNight
+          const hasMeals = ids.length > 0
+          const uniqueCounts = dayCounts(ids, summary)
+          const sittingDay = hasDay ? dayCounts(dayIds, summary) : null
+          const sittingNight = hasNight ? dayCounts(nightIds, summary) : null
           return (
             <div
               key={d.date}
               className={`holiday-summary-card holiday-cal-card ${
                 d.kind === 'yomtov' && hasMeals ? 'is-coming' : 'is-out'
-              }`}
+              }${hasBoth ? ' has-both' : ''}`}
             >
-              <div className="holiday-summary-when">{d.label}</div>
+              <div className="holiday-cal-card-head">
+                <div className="holiday-summary-when">{d.label}</div>
+                <CalendarMealIcons hasDay={hasDay} hasNight={hasNight} />
+              </div>
               <strong>{d.note}</strong>
-              <CalendarCounts {...counts} />
+              {hasBoth ? (
+                <div className="holiday-cal-sittings">
+                  <div className="holiday-cal-sitting">
+                    <SunIcon size={14} />
+                    <CalendarCounts {...sittingDay} />
+                  </div>
+                  <div className="holiday-cal-sitting">
+                    <NightIcon size={14} />
+                    <CalendarCounts {...sittingNight} />
+                  </div>
+                </div>
+              ) : (
+                <CalendarCounts {...uniqueCounts} />
+              )}
             </div>
           )
         })}
