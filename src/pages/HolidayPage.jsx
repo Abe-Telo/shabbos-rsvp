@@ -1357,6 +1357,8 @@ function HolidaySubmissionSummary({ rsvp, hostedMeals, addresses = [] }) {
                 .filter(Boolean)
                 .join(', ')
               const addr = addrById[m.id]
+              const start = formatClockTime(m.start_time)
+              const period = mealPeriod(m.id, hostedMeals)
               return (
                 <div
                   key={m.id}
@@ -1366,8 +1368,24 @@ function HolidaySubmissionSummary({ rsvp, hostedMeals, addresses = [] }) {
                 >
                   <div className="holiday-summary-when">
                     {m.date_label || m.date || ''}
+                    {start ? ` · ${start}` : ''}
                   </div>
-                  <strong>{m.label}</strong>
+                  <span className="meal-sitting-head">
+                    <span className={`meal-cal-opt-icon ${period || 'day'}`}>
+                      {period === 'night' ? (
+                        <NightIcon size={16} />
+                      ) : (
+                        <SunIcon size={16} />
+                      )}
+                    </span>
+                    <span className="coming-meal-num">
+                      {mealNumber(m.id, hostedMeals)}
+                    </span>
+                    <strong>{occasionNameForMeal(m)}</strong>
+                  </span>
+                  {start && (
+                    <div className="meta">Meal starts · {start}</div>
+                  )}
                   <div className={`holiday-summary-status ${yes ? 'yes' : 'no'}`}>
                     {yes ? 'You are coming' : 'Not this meal'}
                   </div>
