@@ -43,56 +43,34 @@ const SUKKOT_5787_CALENDAR = {
   intro:
     'The upcoming Yom Tov begins Friday evening, September 25, and ends Sunday night, October 4, 2026. For hosting, there are two halves of Yom Tov, each with four main meals.',
   days: [
-    { date: '2026-09-25', label: 'Fri 25', kind: 'yomtov', note: 'Erev Sukkos', mealIds: ['n1'], zmanim: ['shabbos-start'] },
-    { date: '2026-09-26', label: 'Sat 26', kind: 'yomtov', note: 'Sukkos 1 / Shabbos', mealIds: ['d1', 'n2'], zmanim: ['shabbos-end'] },
-    { date: '2026-09-27', label: 'Sun 27', kind: 'yomtov', note: 'Sukkos 2', mealIds: ['d2'], zmanim: ['chag-end'] },
-    { date: '2026-09-28', label: 'Mon 28', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
-    { date: '2026-09-29', label: 'Tue 29', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
-    { date: '2026-09-30', label: 'Wed 30', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
-    { date: '2026-10-01', label: 'Thu 1', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
-    { date: '2026-10-02', label: 'Fri 2', kind: 'yomtov', note: 'Hoshana Rabbah / SA night', mealIds: ['sh-n1'], zmanim: ['shabbos-start'] },
-    { date: '2026-10-03', label: 'Sat 3', kind: 'yomtov', note: 'Shemini Atzeres / ST night', mealIds: ['sh-d1', 'sh-n2'], zmanim: ['shabbos-end'] },
-    { date: '2026-10-04', label: 'Sun 4', kind: 'yomtov', note: 'Simchas Torah', mealIds: ['sh-d2'], zmanim: ['chag-end'] },
+    { date: '2026-09-25', hdate: '14 Tishrei', label: 'Fri 25', kind: 'yomtov', note: 'Erev Sukkos', mealIds: ['n1'], zmanim: ['shabbos-start'] },
+    { date: '2026-09-26', hdate: '15 Tishrei', label: 'Sat 26', kind: 'yomtov', note: 'Sukkos 1 / Shabbos', mealIds: ['d1', 'n2'], zmanim: ['shabbos-end'] },
+    { date: '2026-09-27', hdate: '16 Tishrei', label: 'Sun 27', kind: 'yomtov', note: 'Sukkos 2', mealIds: ['d2'], zmanim: ['chag-end'] },
+    { date: '2026-09-28', hdate: '17 Tishrei', label: 'Mon 28', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-09-29', hdate: '18 Tishrei', label: 'Tue 29', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-09-30', hdate: '19 Tishrei', label: 'Wed 30', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-10-01', hdate: '20 Tishrei', label: 'Thu 1', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
+    { date: '2026-10-02', hdate: '21 Tishrei', label: 'Fri 2', kind: 'yomtov', note: 'Hoshana Rabbah / SA night', mealIds: ['sh-n1'], zmanim: ['shabbos-start'] },
+    { date: '2026-10-03', hdate: '22 Tishrei', label: 'Sat 3', kind: 'yomtov', note: 'Shemini Atzeres / ST night', mealIds: ['sh-d1', 'sh-n2'], zmanim: ['shabbos-end'] },
+    { date: '2026-10-04', hdate: '23 Tishrei', label: 'Sun 4', kind: 'yomtov', note: 'Simchas Torah', mealIds: ['sh-d2'], zmanim: ['chag-end'] },
   ],
-  halves: [
-    {
-      id: 'first',
-      title: 'First half: Sukkos',
-      when: 'September 25–27',
-      meals: '4 meals',
-      rows: [
-        ['Fri, Sep 25', 'Erev Sukkos', 'Friday night dinner'],
-        ['Sat, Sep 26', 'Sukkos Day 1 / Shabbos', 'Lunch'],
-        ['Sat, Sep 26', 'Second night of Sukkos', 'Dinner'],
-        ['Sun, Sep 27', 'Sukkos Day 2', 'Lunch'],
-      ],
-    },
-    {
-      id: 'chol',
-      title: 'Chol Hamoed',
-      when: 'September 28 – October 1',
-      meals: 'No Yom Tov meals',
-      note: 'Monday–Thursday, then Hoshana Rabbah on Friday, October 2.',
-      rows: [],
-    },
-    {
-      id: 'second',
-      title: 'Second half: Shemini Atzeres & Simchas Torah',
-      when: 'October 2–4',
-      meals: '4 meals',
-      rows: [
-        ['Fri, Oct 2', 'Shemini Atzeres begins', 'Friday night dinner'],
-        ['Sat, Oct 3', 'Shemini Atzeres / Shabbos', 'Lunch'],
-        ['Sat, Oct 3', 'Simchas Torah begins', 'Dinner'],
-        ['Sun, Oct 4', 'Simchas Torah', 'Lunch'],
-      ],
-    },
+  schedule: [
+    { id: 'n1', half: 'first', date: '2026-09-25', occasion: 'Erev Sukkos', meal: 'Friday night dinner' },
+    { id: 'd1', half: 'first', date: '2026-09-26', occasion: 'Sukkos 1 / Shabbos', meal: 'Lunch' },
+    { id: 'n2', half: 'first', date: '2026-09-26', occasion: 'Second night of Sukkos', meal: 'Dinner' },
+    { id: 'd2', half: 'first', date: '2026-09-27', occasion: 'Sukkos 2', meal: 'Lunch' },
+    { id: 'sh-n1', half: 'second', date: '2026-10-02', occasion: 'Shemini Atzeres night', meal: 'Friday night dinner' },
+    { id: 'sh-d1', half: 'second', date: '2026-10-03', occasion: 'Shemini Atzeres / Shabbos', meal: 'Lunch' },
+    { id: 'sh-n2', half: 'second', date: '2026-10-03', occasion: 'Simchas Torah night', meal: 'Dinner' },
+    { id: 'sh-d2', half: 'second', date: '2026-10-04', occasion: 'Simchas Torah', meal: 'Lunch' },
   ],
-  candles: [
-    ['Fri, Sep 25', '6:29 PM'],
-    ['Sat, Sep 26', 'After Shabbos ends'],
-    ['Fri, Oct 2', '6:18 PM'],
-    ['Sat, Oct 3', 'After Shabbos ends'],
+  zmanimRows: [
+    { date: '2026-09-25', event: 'Shabbos / Sukkos starts', kind: 'candles' },
+    { date: '2026-09-26', event: 'Shabbos ends · light 2nd night', kind: 'shabbos-end' },
+    { date: '2026-09-27', event: 'Chag ends (Havdalah)', kind: 'havdalah' },
+    { date: '2026-10-02', event: 'Shabbos / Shemini Atzeres starts', kind: 'candles' },
+    { date: '2026-10-03', event: 'Shabbos ends · light Simchas Torah', kind: 'shabbos-end' },
+    { date: '2026-10-04', event: 'Chag ends (Havdalah)', kind: 'havdalah' },
   ],
 }
 
@@ -268,7 +246,50 @@ function CalendarCounts({ registered, guests, total }) {
 
 const ZMANIM_FALLBACK = {
   '2026-09-25': { candles: '6:29 PM' },
+  '2026-09-26': { candles: '7:27 PM' },
+  '2026-09-27': { havdalah: '7:25 PM' },
   '2026-10-02': { candles: '6:18 PM' },
+  '2026-10-03': { candles: '7:15 PM' },
+  '2026-10-04': { havdalah: '7:13 PM' },
+}
+
+function zmanTime(times, kind) {
+  const t = times || {}
+  if (kind === 'candles' || kind === 'shabbos-start' || kind === 'chag-start') {
+    return t.candles || ''
+  }
+  if (kind === 'shabbos-end') return t.havdalah || t.candles || ''
+  if (kind === 'havdalah' || kind === 'chag-end') return t.havdalah || ''
+  return ''
+}
+
+function formatCalDate(iso) {
+  const dt = new Date(`${iso}T12:00:00`)
+  if (Number.isNaN(dt.getTime())) return iso
+  return dt.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function scheduleZman(row, day, times) {
+  const period = mealPeriod(row.id)
+  const t = times || {}
+  if (period === 'night') {
+    if (day?.zmanim?.includes('shabbos-start') && t.candles) {
+      return `Candles ${t.candles}`
+    }
+    if (day?.zmanim?.includes('shabbos-end')) {
+      const time = t.havdalah || t.candles
+      return time ? `After Shabbos ${time}` : ''
+    }
+    return ''
+  }
+  if (day?.zmanim?.includes('chag-end') && t.havdalah) {
+    return `Chag ends ${t.havdalah}`
+  }
+  return ''
 }
 
 function zmanimLines(day, times, hostedMeals) {
@@ -281,8 +302,9 @@ function zmanimLines(day, times, hostedMeals) {
     if (kind === 'chag-start' && t.candles) {
       lines.push({ label: 'Chag starts', time: t.candles })
     }
-    if (kind === 'shabbos-end' && t.havdalah) {
-      lines.push({ label: 'Shabbos ends', time: t.havdalah })
+    if (kind === 'shabbos-end') {
+      const time = t.havdalah || t.candles
+      if (time) lines.push({ label: 'Shabbos ends', time })
     }
     if (kind === 'chag-end' && t.havdalah) {
       lines.push({ label: 'Chag ends', time: t.havdalah })
@@ -318,9 +340,17 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
     let alive = true
     fetchBrooklynZmanim(start, end)
       .then((times) => {
-        if (alive && times && Object.keys(times).length) {
-          setZmanim({ ...ZMANIM_FALLBACK, ...times })
-        }
+        if (!alive || !times || !Object.keys(times).length) return
+        setZmanim((prev) => {
+          const next = { ...prev }
+          for (const [day, t] of Object.entries(times)) {
+            next[day] = {
+              candles: t.candles || prev[day]?.candles || '',
+              havdalah: t.havdalah || prev[day]?.havdalah || '',
+            }
+          }
+          return next
+        })
       })
       .catch(() => {})
     return () => {
@@ -398,6 +428,7 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
                 <CalendarMealIcons hasDay={hasDay} hasNight={hasNight} />
               </div>
               <strong>{d.note}</strong>
+              {d.hdate ? <div className="holiday-cal-hdate">{d.hdate}</div> : null}
               {times.length > 0 && (
                 <div className="holiday-cal-zmanim">
                   {times.map((line, i) => (
@@ -434,60 +465,134 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
         })}
       </div>
 
-      {cal.halves.map((half) => (
-        <div key={half.id} className="holiday-cal-half">
-          <h3>{half.title}</h3>
-          <p className="meta">
-            {half.when} · {half.meals}
-          </p>
-          {half.note && <p className="hint">{half.note}</p>}
-          {half.rows.length > 0 && (
+      {[
+        {
+          id: 'first',
+          title: 'First half: Sukkos',
+          when: 'September 25–27 · 4 meals',
+        },
+        {
+          id: 'chol',
+          title: 'Chol Hamoed',
+          when: 'September 28 – October 1 · no hosted Yom Tov meals',
+        },
+        {
+          id: 'second',
+          title: 'Second half: Shemini Atzeres & Simchas Torah',
+          when: 'October 2–4 · 4 meals',
+        },
+      ].map((half) => {
+        const rows = (cal.schedule || []).filter((r) => r.half === half.id)
+        return (
+          <div key={half.id} className="holiday-cal-half">
+            <h3>{half.title}</h3>
+            <p className="meta">{half.when}</p>
+            {half.id === 'chol' ? (
+              <p className="hint">
+                Monday–Thursday are Chol Hamoed (17–20 Tishrei). Friday,
+                October 2 is Hoshana Rabbah during the day; Yom Tov starts
+                again at candle lighting that evening.
+              </p>
+            ) : null}
+            {half.id === 'second' ? (
+              <p className="hint">
+                Simchas Torah lunch is hosted only if needed — most shuls
+                already have meals. The host will decide during Chol Hamoed.
+              </p>
+            ) : null}
+            {rows.length > 0 && (
             <div className="sheet-wrap">
-              <table className="sheet-table">
+              <table className="sheet-table holiday-cal-sheet">
                 <thead>
                   <tr>
+                    <th>#</th>
+                    <th></th>
                     <th>Date</th>
                     <th>Occasion</th>
                     <th>Meal</th>
+                    <th>Time</th>
+                    <th>Host</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {half.rows.map((row, i) => (
-                    <tr key={`${half.id}-${i}`}>
-                      <td>{row[0]}</td>
-                      <td className="sheet-cell-wrap">{row[1]}</td>
-                      <td>{row[2]}</td>
-                    </tr>
-                  ))}
+                  {rows.map((row) => {
+                    const hosted = (hostedMeals || []).find((m) => m.id === row.id)
+                    const day = cal.days.find((d) => d.date === row.date)
+                    const period = mealPeriod(row.id, hostedMeals)
+                    const start = formatClockTime(hosted?.start_time)
+                    const zman = scheduleZman(row, day, zmanim[row.date])
+                    const num = mealNumber(row.id, hostedMeals)
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <span className="coming-meal-num">{num}</span>
+                        </td>
+                        <td>
+                          {period === 'night' ? (
+                            <NightIcon size={16} />
+                          ) : (
+                            <SunIcon size={16} />
+                          )}
+                        </td>
+                        <td>
+                          {formatCalDate(row.date)}
+                          {day?.hdate ? (
+                            <div className="holiday-cal-hdate">{day.hdate}</div>
+                          ) : null}
+                        </td>
+                        <td className="sheet-cell-wrap">{row.occasion}</td>
+                        <td>{row.meal}</td>
+                        <td>
+                          {start ? (
+                            <div className="holiday-cal-start">Meal {start}</div>
+                          ) : null}
+                          {zman ? <div className="meta">{zman}</div> : null}
+                          {!start && !zman ? '—' : null}
+                        </td>
+                        <td>{hosted?.host_name || '—'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        )
+      })}
 
-      <h3>Candle-lighting times in Brooklyn</h3>
+      <h3>Zmanim in Brooklyn</h3>
       <div className="sheet-wrap">
         <table className="sheet-table">
           <thead>
             <tr>
               <th>Date</th>
+              <th>Hebrew</th>
+              <th>Event</th>
               <th>Time</th>
             </tr>
           </thead>
           <tbody>
-            {cal.candles.map((row) => (
-              <tr key={row[0]}>
-                <td>{row[0]}</td>
-                <td>{row[1]}</td>
-              </tr>
-            ))}
+            {(cal.zmanimRows || []).map((row) => {
+              const day = cal.days.find((d) => d.date === row.date)
+              const time = zmanTime(zmanim[row.date], row.kind)
+              return (
+                <tr key={`${row.date}-${row.kind}`}>
+                  <td>{formatCalDate(row.date)}</td>
+                  <td>{day?.hdate || ''}</td>
+                  <td className="sheet-cell-wrap">{row.event}</td>
+                  <td>{time || '—'}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
       <p className="hint" style={{ marginBottom: 0 }}>
-        Times are Brooklyn zmanim from Hebcal. Light candles before the Friday
-        time. Meal starts only shows when the host sets a time in Admin.
+        Times are Brooklyn zmanim from Hebcal, 18 minutes before sunset. Light
+        candles before the Friday time. On Saturday night light from an existing
+        flame after Shabbos ends. Meal time only shows when the host sets it in
+        Admin.
       </p>
     </div>
   )

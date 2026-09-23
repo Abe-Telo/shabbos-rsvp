@@ -493,7 +493,7 @@ export function formatClockTime(raw) {
   return `${h}:${min} ${ap}`
 }
 
-const ZMANIM_CACHE = 'shabbos-brooklyn-zmanim-v1'
+const ZMANIM_CACHE = 'shabbos-brooklyn-zmanim-v2'
 const BROOKLYN_GEONAME = 5110302
 
 function emptyZmanimDay() {
