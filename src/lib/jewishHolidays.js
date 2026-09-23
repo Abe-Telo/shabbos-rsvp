@@ -40,6 +40,7 @@ function meal(id, label, date, period) {
     host_name: '',
     address: '',
     notes: '',
+    start_time: '',
     date_label: formatShort(date),
   }
 }
@@ -440,4 +441,71 @@ export function formatMealLabel(meal) {
   if (!meal) return ''
   const when = meal.date_label || formatShort(meal.date)
   return `${meal.label} · ${when}`
+}
+
+export function formatClockTime(raw) {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  if (/[ap]m/i.test(s)) return s.replace(/\s+/g, ' ')
+  const iso = Date.parse(s)
+  if (!Number.isNaN(iso) && /T/.test(s)) {
+    return new Date(s).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  }
+  const m = /^(\d{1,2}):(\d{2})/.exec(s)
+  if (!m) return s
+  let h = Number(m[1])
+  const min = m[2]
+  const ap = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  return `${h}:${min} ${ap}`
+}
+
+const ZMANIM_CACHE = 'shabbos-brooklyn-zmanim-v1'
+const BROOKLYN_GEONAME = 5110302
+
+function emptyZmanimDay() {
+  return { candles: '', havdalah: '' }
+}
+
+export async function fetchBrooklynZmanim(startDate, endDate) {
+  const start = String(startDate || '').slice(0, 10)
+  const end = String(endDate || '').slice(0, 10)
+  if (!start || !end) return {}
+  const key = `${start}:${end}`
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(ZMANIM_CACHE) || '{}')
+    if (cached[key]) return cached[key]
+  } catch {
+    /* ignore */
+  }
+
+  const url =
+    `https://www.hebcal.com/hebcal?v=1&cfg=json&c=on&b=18&M=on` +
+    `&geo=geoname&geonameid=${BROOKLYN_GEONAME}` +
+    `&start=${start}&end=${end}` +
+    `&maj=off&min=off&mod=off&nx=off&ss=off&mf=off`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Could not load zmanim (${res.status})`)
+  const body = await res.json()
+  const byDate = {}
+  for (const it of body.items || []) {
+    const iso = String(it.date || '')
+    const day = iso.slice(0, 10)
+    if (!day) continue
+    const time = formatClockTime(iso)
+    if (!byDate[day]) byDate[day] = emptyZmanimDay()
+    if (it.category === 'candles') byDate[day].candles = time
+    if (it.category === 'havdalah') byDate[day].havdalah = time
+  }
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(ZMANIM_CACHE) || '{}')
+    cached[key] = byDate
+    sessionStorage.setItem(ZMANIM_CACHE, JSON.stringify(cached))
+  } catch {
+    /* ignore */
+  }
+  return byDate
 }

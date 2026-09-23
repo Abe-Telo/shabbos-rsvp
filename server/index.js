@@ -760,6 +760,7 @@ function normalizeHolidayEvent(raw) {
         host_name: String(m.host_name || m.hostName || '').trim(),
         address: String(m.address || '').trim(),
         notes: String(m.notes || '').trim(),
+        start_time: String(m.start_time || m.startTime || '').trim(),
         date_label: String(m.date_label || m.dateLabel || '').trim() || null,
       }))
     : []

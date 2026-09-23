@@ -891,6 +891,21 @@ button.meal-cal-opt {
   line-height: 1.3;
 }
 
+.holiday-cal-zmanim {
+  display: grid;
+  gap: 0.18rem;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  line-height: 1.25;
+}
+
+.holiday-cal-zmanim > div {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
 .holiday-cal-counts {
   display: flex;
   justify-content: space-between;

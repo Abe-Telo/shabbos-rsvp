@@ -11,7 +11,11 @@ import {
 } from '../lib/api'
 import { fileToFoodPhotoData } from '../lib/auth'
 import { HOST_PAYMENT } from '../lib/formConfig'
-import { formatMealLabel } from '../lib/jewishHolidays'
+import {
+  fetchBrooklynZmanim,
+  formatClockTime,
+  formatMealLabel,
+} from '../lib/jewishHolidays'
 import { loadRememberedForm, saveRememberedForm } from '../lib/localProfile'
 import { useAuth } from '../lib/AuthContext'
 
@@ -39,16 +43,16 @@ const SUKKOT_5787_CALENDAR = {
   intro:
     'The upcoming Yom Tov begins Friday evening, September 25, and ends Sunday night, October 4, 2026. For hosting, there are two halves of Yom Tov, each with four main meals.',
   days: [
-    { date: '2026-09-25', label: 'Fri 25', kind: 'yomtov', note: 'Erev Sukkos', mealIds: ['n1'] },
-    { date: '2026-09-26', label: 'Sat 26', kind: 'yomtov', note: 'Sukkos 1 / Shabbos', mealIds: ['d1', 'n2'] },
-    { date: '2026-09-27', label: 'Sun 27', kind: 'yomtov', note: 'Sukkos 2', mealIds: ['d2'] },
+    { date: '2026-09-25', label: 'Fri 25', kind: 'yomtov', note: 'Erev Sukkos', mealIds: ['n1'], zmanim: ['shabbos-start'] },
+    { date: '2026-09-26', label: 'Sat 26', kind: 'yomtov', note: 'Sukkos 1 / Shabbos', mealIds: ['d1', 'n2'], zmanim: ['shabbos-end'] },
+    { date: '2026-09-27', label: 'Sun 27', kind: 'yomtov', note: 'Sukkos 2', mealIds: ['d2'], zmanim: ['chag-end'] },
     { date: '2026-09-28', label: 'Mon 28', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
     { date: '2026-09-29', label: 'Tue 29', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
     { date: '2026-09-30', label: 'Wed 30', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
     { date: '2026-10-01', label: 'Thu 1', kind: 'chol', note: 'Chol Hamoed', mealIds: [] },
-    { date: '2026-10-02', label: 'Fri 2', kind: 'yomtov', note: 'Hoshana Rabbah / SA night', mealIds: ['sh-n1'] },
-    { date: '2026-10-03', label: 'Sat 3', kind: 'yomtov', note: 'Shemini Atzeres / ST night', mealIds: ['sh-d1', 'sh-n2'] },
-    { date: '2026-10-04', label: 'Sun 4', kind: 'yomtov', note: 'Simchas Torah', mealIds: ['sh-d2'] },
+    { date: '2026-10-02', label: 'Fri 2', kind: 'yomtov', note: 'Hoshana Rabbah / SA night', mealIds: ['sh-n1'], zmanim: ['shabbos-start'] },
+    { date: '2026-10-03', label: 'Sat 3', kind: 'yomtov', note: 'Shemini Atzeres / ST night', mealIds: ['sh-d1', 'sh-n2'], zmanim: ['shabbos-end'] },
+    { date: '2026-10-04', label: 'Sun 4', kind: 'yomtov', note: 'Simchas Torah', mealIds: ['sh-d2'], zmanim: ['chag-end'] },
   ],
   halves: [
     {
@@ -262,11 +266,67 @@ function CalendarCounts({ registered, guests, total }) {
   )
 }
 
+const ZMANIM_FALLBACK = {
+  '2026-09-25': { candles: '6:29 PM' },
+  '2026-10-02': { candles: '6:18 PM' },
+}
+
+function zmanimLines(day, times, hostedMeals) {
+  const t = times || {}
+  const lines = []
+  for (const kind of day.zmanim || []) {
+    if (kind === 'shabbos-start' && t.candles) {
+      lines.push({ label: 'Shabbos starts', time: t.candles })
+    }
+    if (kind === 'chag-start' && t.candles) {
+      lines.push({ label: 'Chag starts', time: t.candles })
+    }
+    if (kind === 'shabbos-end' && t.havdalah) {
+      lines.push({ label: 'Shabbos ends', time: t.havdalah })
+    }
+    if (kind === 'chag-end' && t.havdalah) {
+      lines.push({ label: 'Chag ends', time: t.havdalah })
+    }
+  }
+  const meals = (hostedMeals || []).filter((m) =>
+    (day.mealIds || []).includes(m.id),
+  )
+  for (const m of meals) {
+    const time = formatClockTime(m.start_time)
+    if (!time) continue
+    const period = mealPeriod(m.id, hostedMeals)
+    lines.push({
+      label: 'Meal starts',
+      time,
+      period,
+    })
+  }
+  return lines
+}
+
 function CalendarTab({ holiday, summary, hostedMeals }) {
+  const [zmanim, setZmanim] = useState(ZMANIM_FALLBACK)
   const showSukkot =
     String(holiday?.holiday_id || '').includes('sukkot') ||
     /sukko/i.test(holiday?.title || '')
   const cal = showSukkot ? SUKKOT_5787_CALENDAR : null
+
+  useEffect(() => {
+    if (!cal?.days?.length) return
+    const start = cal.days[0].date
+    const end = cal.days[cal.days.length - 1].date
+    let alive = true
+    fetchBrooklynZmanim(start, end)
+      .then((times) => {
+        if (alive && times && Object.keys(times).length) {
+          setZmanim({ ...ZMANIM_FALLBACK, ...times })
+        }
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [cal])
 
   if (!cal) {
     const meals = (holiday?.meals || []).filter((m) => m.hosted !== false)
@@ -325,6 +385,7 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
           const uniqueCounts = dayCounts(ids, summary)
           const sittingDay = hasDay ? dayCounts(dayIds, summary) : null
           const sittingNight = hasNight ? dayCounts(nightIds, summary) : null
+          const times = zmanimLines(d, zmanim[d.date], hostedMeals)
           return (
             <div
               key={d.date}
@@ -337,6 +398,23 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
                 <CalendarMealIcons hasDay={hasDay} hasNight={hasNight} />
               </div>
               <strong>{d.note}</strong>
+              {times.length > 0 && (
+                <div className="holiday-cal-zmanim">
+                  {times.map((line, i) => (
+                    <div key={`${d.date}-${line.label}-${i}`}>
+                      {line.period === 'night' ? (
+                        <NightIcon size={12} />
+                      ) : line.period === 'day' ? (
+                        <SunIcon size={12} />
+                      ) : null}
+                      <span>
+                        {line.label}
+                        {line.time ? ` · ${line.time}` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {hasBoth ? (
                 <div className="holiday-cal-sittings">
                   <div className="holiday-cal-sitting">
@@ -408,8 +486,8 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
         </table>
       </div>
       <p className="hint" style={{ marginBottom: 0 }}>
-        Times are for Brooklyn, NY. Light before the listed time on Friday.
-        Saturday night is after Shabbos.
+        Times are Brooklyn zmanim from Hebcal. Light candles before the Friday
+        time. Meal starts only shows when the host sets a time in Admin.
       </p>
     </div>
   )

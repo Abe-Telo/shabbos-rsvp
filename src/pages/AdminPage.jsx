@@ -657,6 +657,7 @@ export default function AdminPage() {
             host_name: old.host_name || '',
             address: old.address || '',
             notes: old.notes || '',
+            start_time: old.start_time || '',
           }
         }),
       }
@@ -1548,6 +1549,16 @@ export default function AdminPage() {
                           }
                           rows={2}
                           placeholder="Street, city…"
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Meal start time</label>
+                        <input
+                          type="time"
+                          value={m.start_time || ''}
+                          onChange={(e) =>
+                            updateMeal(idx, { start_time: e.target.value })
+                          }
                         />
                       </div>
                       <div className="field">
