@@ -691,6 +691,27 @@ function FoodTab({
         ))}
       </div>
 
+      <form onSubmit={addCustom} style={{ marginTop: '1.1rem' }}>
+        <div className="field">
+          <label>Add another item</label>
+          <div className="holiday-food-add">
+            <input
+              type="text"
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              placeholder="e.g. Honey cake, soup…"
+            />
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={Boolean(busy) || !newItem.trim()}
+            >
+              Add &amp; cover
+            </button>
+          </div>
+        </div>
+      </form>
+
       {suggestions.length > 0 && (
         <>
           <h3
@@ -722,27 +743,6 @@ function FoodTab({
           </div>
         </>
       )}
-
-      <form onSubmit={addCustom} style={{ marginTop: '1.1rem' }}>
-        <div className="field">
-          <label>Add another item</label>
-          <div className="holiday-food-add">
-            <input
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="e.g. Honey cake, soup…"
-            />
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={Boolean(busy) || !newItem.trim()}
-            >
-              Add &amp; cover
-            </button>
-          </div>
-        </div>
-      </form>
     </div>
   )
 }
