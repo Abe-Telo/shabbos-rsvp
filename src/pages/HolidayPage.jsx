@@ -118,21 +118,25 @@ function PaymentBlock() {
 }
 
 function dayCounts(day, summary, hostedMeals) {
-  const byId = Object.fromEntries(
-    (summary?.meals || []).map((m) => [m.meal_id, m]),
-  )
-  const ids =
+  const ids = new Set(
     day.mealIds ||
-    (hostedMeals || [])
-      .filter((m) => m.date === day.date)
-      .map((m) => m.id)
+      (hostedMeals || [])
+        .filter((m) => m.date === day.date)
+        .map((m) => m.id),
+  )
   let registered = 0
   let guests = 0
-  for (const id of ids) {
-    const row = byId[id]
-    if (!row) continue
-    registered += Number(row.self_count) || 0
-    guests += Number(row.guest_count) || 0
+  for (const p of summary?.people || []) {
+    const coming = (p.meals || []).some((id) => ids.has(id))
+    if (!coming) continue
+    registered += 1
+    let peak = 0
+    for (const g of p.guest_details || []) {
+      const onDay = (g.meals || []).some((id) => ids.has(id))
+      if (!onDay) continue
+      peak = Math.max(peak, Math.max(0, Number(g.count) || 0))
+    }
+    guests += peak
   }
   return { registered, guests, total: registered + guests }
 }
@@ -199,6 +203,11 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
       <h2>{cal.title}</h2>
       <p className="hint">{cal.place}</p>
       <p>{cal.intro}</p>
+
+      <p className="hint">
+        Day counts are unique people (same as Who&apos;s coming). Lunch and
+        dinner on the same date are not added together.
+      </p>
 
       <div className="holiday-cal-strip" aria-label="Sukkos calendar">
         {cal.days.map((d) => {
