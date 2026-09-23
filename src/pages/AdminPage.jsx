@@ -644,6 +644,7 @@ export default function AdminPage() {
       return {
         ...next,
         enabled: prev.enabled,
+        title: sameHoliday && prev.title ? prev.title : next.title,
         statement:
           sameHoliday && prev.statement ? prev.statement : next.statement,
         meals: next.meals.map((m) => {
@@ -662,6 +663,23 @@ export default function AdminPage() {
     })
     setHolidayMealFilter('all')
   }
+
+  useEffect(() => {
+    if (!holidayCatalogAll.length || !holidayDraft.holiday_id) return
+    const pkg =
+      holidayCatalogAll.find((p) => p.id === holidayDraft.holiday_id) ||
+      holidayCatalogAll.find(
+        (p) =>
+          p.slug === 'sukkot' &&
+          String(holidayDraft.holiday_id).startsWith('sukkot-'),
+      )
+    if (!pkg?.meals?.length) return
+    const have = new Set((holidayDraft.meals || []).map((m) => m.id))
+    const missing = pkg.meals.filter((m) => !have.has(m.id))
+    if (!missing.length) return
+    applyHolidayPackage(pkg.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holidayCatalogAll, holidayDraft.holiday_id])
 
   function updateMeal(idx, patch) {
     setHolidayDraft((prev) => ({
@@ -1429,12 +1447,50 @@ export default function AdminPage() {
                   margin: '0.5rem 0 0.75rem',
                 }}
               >
-                Meals (night / day)
+                Meals ({holidayDraft.meals.length} slots)
               </h3>
+              {holidayDraft.meals.some((m) => String(m.id).startsWith('sh-')) && (
+                <p className="hint" style={{ marginTop: 0 }}>
+                  First half = first two days of Sukkot. Second half = Shmini
+                  Atzeret / Simchat Torah. Uncheck any meal you are not hosting.
+                </p>
+              )}
               {holidayDraft.meals.length === 0 && (
                 <div className="empty">Pick a holiday to load meal slots.</div>
               )}
-              {holidayDraft.meals.map((m, idx) => (
+              {(holidayDraft.meals.some((m) => String(m.id).startsWith('sh-'))
+                ? [
+                    {
+                      id: 'first',
+                      title: 'First half — first days of Sukkot',
+                      match: (m) => !String(m.id).startsWith('sh-'),
+                    },
+                    {
+                      id: 'second',
+                      title: 'Second half — Shmini Atzeret / Simchat Torah',
+                      match: (m) => String(m.id).startsWith('sh-'),
+                    },
+                  ]
+                : [{ id: 'all', title: null, match: () => true }]
+              ).map((group) => {
+                const rows = holidayDraft.meals
+                  .map((m, idx) => ({ m, idx }))
+                  .filter(({ m }) => group.match(m))
+                if (!rows.length) return null
+                return (
+                  <div key={group.id}>
+                    {group.title && (
+                      <h3
+                        style={{
+                          fontFamily: 'var(--font-display)',
+                          fontSize: '1.05rem',
+                          margin: '1rem 0 0.65rem',
+                        }}
+                      >
+                        {group.title}
+                      </h3>
+                    )}
+                    {rows.map(({ m, idx }) => (
                 <div
                   key={m.id}
                   className="rsvp-row"
@@ -1502,7 +1558,10 @@ export default function AdminPage() {
                     </>
                   )}
                 </div>
-              ))}
+                    ))}
+                  </div>
+                )
+              })}
 
               {holidayMsg && (
                 <div className="banner banner-ok">{holidayMsg}</div>
