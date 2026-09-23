@@ -29,7 +29,67 @@ const MAIN_TABS = [
   { id: 'form', label: 'Form' },
   { id: 'coming', label: "Who's coming" },
   { id: 'food', label: 'Food' },
+  { id: 'calendar', label: 'Calendar' },
 ]
+
+const SUKKOT_5787_CALENDAR = {
+  title: 'Sukkos & Simchas Torah Calendar 2026',
+  place: 'Brooklyn, NY · 5787',
+  intro:
+    'The upcoming Yom Tov begins Friday evening, September 25, and ends Sunday night, October 4, 2026. For hosting, there are two halves of Yom Tov, each with four main meals.',
+  days: [
+    { date: '2026-09-25', label: 'Fri 25', kind: 'yomtov', note: 'Erev Sukkos' },
+    { date: '2026-09-26', label: 'Sat 26', kind: 'yomtov', note: 'Sukkos 1 / Shabbos' },
+    { date: '2026-09-27', label: 'Sun 27', kind: 'yomtov', note: 'Sukkos 2' },
+    { date: '2026-09-28', label: 'Mon 28', kind: 'chol', note: 'Chol Hamoed' },
+    { date: '2026-09-29', label: 'Tue 29', kind: 'chol', note: 'Chol Hamoed' },
+    { date: '2026-09-30', label: 'Wed 30', kind: 'chol', note: 'Chol Hamoed' },
+    { date: '2026-10-01', label: 'Thu 1', kind: 'chol', note: 'Chol Hamoed' },
+    { date: '2026-10-02', label: 'Fri 2', kind: 'yomtov', note: 'Hoshana Rabbah / SA night' },
+    { date: '2026-10-03', label: 'Sat 3', kind: 'yomtov', note: 'Shemini Atzeres / ST night' },
+    { date: '2026-10-04', label: 'Sun 4', kind: 'yomtov', note: 'Simchas Torah' },
+  ],
+  halves: [
+    {
+      id: 'first',
+      title: 'First half: Sukkos',
+      when: 'September 25–27',
+      meals: '4 meals',
+      rows: [
+        ['Fri, Sep 25', 'Erev Sukkos', 'Friday night dinner'],
+        ['Sat, Sep 26', 'Sukkos Day 1 / Shabbos', 'Lunch'],
+        ['Sat, Sep 26', 'Second night of Sukkos', 'Dinner'],
+        ['Sun, Sep 27', 'Sukkos Day 2', 'Lunch'],
+      ],
+    },
+    {
+      id: 'chol',
+      title: 'Chol Hamoed',
+      when: 'September 28 – October 1',
+      meals: 'No Yom Tov meals',
+      note: 'Monday–Thursday, then Hoshana Rabbah on Friday, October 2.',
+      rows: [],
+    },
+    {
+      id: 'second',
+      title: 'Second half: Shemini Atzeres & Simchas Torah',
+      when: 'October 2–4',
+      meals: '4 meals',
+      rows: [
+        ['Fri, Oct 2', 'Shemini Atzeres begins', 'Friday night dinner'],
+        ['Sat, Oct 3', 'Shemini Atzeres / Shabbos', 'Lunch'],
+        ['Sat, Oct 3', 'Simchas Torah begins', 'Dinner'],
+        ['Sun, Oct 4', 'Simchas Torah', 'Lunch'],
+      ],
+    },
+  ],
+  candles: [
+    ['Fri, Sep 25', '6:29 PM'],
+    ['Sat, Sep 26', 'After Shabbos ends'],
+    ['Fri, Oct 2', '6:18 PM'],
+    ['Sat, Oct 3', 'After Shabbos ends'],
+  ],
+}
 
 const DEFAULT_FOOD_SUGGESTIONS = [
   'Challah',
@@ -52,6 +112,121 @@ function PaymentBlock() {
       </div>
       <p className="hint" style={{ marginBottom: 0, marginTop: '0.4rem' }}>
         Please include your name in the Zelle memo. Thank you!
+      </p>
+    </div>
+  )
+}
+
+function CalendarTab({ holiday }) {
+  const showSukkot =
+    String(holiday?.holiday_id || '').includes('sukkot') ||
+    /sukko/i.test(holiday?.title || '')
+  const cal = showSukkot ? SUKKOT_5787_CALENDAR : null
+
+  if (!cal) {
+    const meals = (holiday?.meals || []).filter((m) => m.hosted !== false)
+    return (
+      <div className="panel">
+        <h2>{holiday?.title || 'Holiday calendar'}</h2>
+        <p className="hint">Meal dates the host is offering this holiday.</p>
+        {meals.length === 0 ? (
+          <div className="empty">No hosted meals yet.</div>
+        ) : (
+          <div className="sheet-wrap">
+            <table className="sheet-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Meal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {meals.map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.date_label || m.date}</td>
+                    <td>{formatMealLabel(m)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="panel">
+      <h2>{cal.title}</h2>
+      <p className="hint">{cal.place}</p>
+      <p>{cal.intro}</p>
+
+      <div className="holiday-cal-strip" aria-label="Sukkos calendar">
+        {cal.days.map((d) => (
+          <div
+            key={d.date}
+            className={`holiday-cal-day holiday-cal-day-${d.kind}`}
+          >
+            <strong>{d.label}</strong>
+            <span>{d.note}</span>
+          </div>
+        ))}
+      </div>
+
+      {cal.halves.map((half) => (
+        <div key={half.id} className="holiday-cal-half">
+          <h3>{half.title}</h3>
+          <p className="meta">
+            {half.when} · {half.meals}
+          </p>
+          {half.note && <p className="hint">{half.note}</p>}
+          {half.rows.length > 0 && (
+            <div className="sheet-wrap">
+              <table className="sheet-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Occasion</th>
+                    <th>Meal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {half.rows.map((row, i) => (
+                    <tr key={`${half.id}-${i}`}>
+                      <td>{row[0]}</td>
+                      <td className="sheet-cell-wrap">{row[1]}</td>
+                      <td>{row[2]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <h3>Candle-lighting times in Brooklyn</h3>
+      <div className="sheet-wrap">
+        <table className="sheet-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cal.candles.map((row) => (
+              <tr key={row[0]}>
+                <td>{row[0]}</td>
+                <td>{row[1]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="hint" style={{ marginBottom: 0 }}>
+        Times are for Brooklyn, NY. Light before the listed time on Friday.
+        Saturday night is after Shabbos.
       </p>
     </div>
   )
@@ -768,6 +943,10 @@ export default function HolidayPage() {
 
       {mainTab === 'coming' && holiday?.enabled && (
         <AttendanceTab summary={summary} hostedMeals={hostedMeals} />
+      )}
+
+      {mainTab === 'calendar' && holiday?.enabled && (
+        <CalendarTab holiday={holiday} />
       )}
 
       {mainTab === 'food' && holiday?.enabled && (
