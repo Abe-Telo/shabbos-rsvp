@@ -651,10 +651,84 @@ select {
 }
 
 .holiday-cal-half h3,
-.panel > h3 {
+.panel > h3,
+.holiday-summary-group h3,
+.holiday-summary-help h3 {
   font-family: var(--font-display);
   font-size: 1.05rem;
   margin: 1.1rem 0 0.45rem;
+}
+
+.holiday-summary {
+  margin-top: 0.85rem;
+}
+
+.holiday-summary-who {
+  margin-bottom: 0.75rem;
+}
+
+.holiday-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.holiday-summary-card {
+  border: 1px solid rgba(26, 36, 28, 0.1);
+  border-radius: 12px;
+  padding: 0.75rem 0.8rem;
+  background: #fff;
+  min-height: 6.2rem;
+}
+
+.holiday-summary-card.is-coming {
+  background: rgba(196, 92, 38, 0.1);
+  border-color: rgba(196, 92, 38, 0.28);
+}
+
+.holiday-summary-card.is-out {
+  background: rgba(243, 235, 224, 0.45);
+  opacity: 0.72;
+}
+
+.holiday-summary-when {
+  font-size: 0.78rem;
+  color: var(--muted, #5b635c);
+  margin-bottom: 0.2rem;
+}
+
+.holiday-summary-status {
+  font-size: 0.84rem;
+  font-weight: 700;
+  margin: 0.35rem 0 0.2rem;
+}
+
+.holiday-summary-status.yes {
+  color: #2f6b3a;
+}
+
+.holiday-summary-status.no {
+  color: #6b645c;
+}
+
+.holiday-summary-help {
+  margin-top: 0.35rem;
+}
+
+.holiday-summary-help-grid {
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+
+.holiday-summary-help-grid .holiday-summary-card {
+  min-height: 0;
+}
+
+.holiday-summary-notes {
+  margin-top: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(243, 235, 224, 0.65);
+  white-space: pre-wrap;
 }
 
 .person-name-link {

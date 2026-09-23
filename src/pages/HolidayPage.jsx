@@ -551,38 +551,120 @@ function FoodTab({
   )
 }
 
-function HolidaySubmissionSummary({ rsvp, hostedMeals }) {
+function mealHalfKey(meal) {
+  const id = String(meal?.id || '')
+  const label = String(meal?.label || '')
+  if (id.startsWith('sh-') || /second half/i.test(label)) return 'second'
+  if (/first half/i.test(label)) return 'first'
+  return 'all'
+}
+
+function HolidaySubmissionSummary({ rsvp, hostedMeals, addresses = [] }) {
   if (!rsvp) return null
-  const mealLabels = (rsvp.meals || [])
-    .map((id) => hostedMeals.find((m) => m.id === id)?.label || id)
-    .join(', ')
-  const guests = (rsvp.guests || [])
-    .map((g) => {
-      const meals = (g.meals || [])
-        .map((id) => hostedMeals.find((m) => m.id === id)?.label || id)
-        .join('/')
-      return `${meals}: ${g.name || 'Guest'} ×${g.count}`
-    })
-    .join(' · ')
+  const coming = new Set(rsvp.meals || [])
   const help = rsvp.help || {}
+  const addrById = Object.fromEntries((addresses || []).map((a) => [a.id, a]))
+  const groups = [
+    { id: 'first', title: 'First half' },
+    { id: 'second', title: 'Second half' },
+    { id: 'all', title: 'Your meals' },
+  ]
+    .map((g) => ({
+      ...g,
+      meals: hostedMeals.filter((m) => mealHalfKey(m) === g.id),
+    }))
+    .filter((g) => g.meals.length)
+
   return (
-    <div className="rsvp-row" style={{ marginTop: '0.75rem' }}>
-      <strong>{rsvp.full_name}</strong>
-      <div className="meta">Meals: {mealLabels || '—'}</div>
-      <div className="meta">Guests: {guests || 'None'}</div>
-      <div className="tags" style={{ marginTop: '0.35rem' }}>
-        {help.donate && (
-          <span className="tag">
-            Donate{help.amount ? ` ${help.amount}` : ''}
-          </span>
-        )}
-        {help.potluck && <span className="tag">Potluck</span>}
-        {help.clean && <span className="tag">Clean</span>}
-        {!help.donate && !help.potluck && !help.clean && (
-          <span className="tag">No help marked</span>
+    <div className="holiday-summary">
+      <div className="holiday-summary-who">
+        <strong>{rsvp.full_name}</strong>
+        {rsvp.phone && <div className="meta">{rsvp.phone}</div>}
+      </div>
+
+      {groups.map((group) => (
+        <div key={group.id} className="holiday-summary-group">
+          {groups.length > 1 && <h3>{group.title}</h3>}
+          <div className="holiday-summary-grid">
+            {group.meals.map((m) => {
+              const yes = coming.has(m.id)
+              const extras = (rsvp.guests || []).filter((g) =>
+                (g.meals || []).includes(m.id),
+              )
+              const guestCount = extras.reduce(
+                (n, g) => n + Math.max(0, Number(g.count) || 0),
+                0,
+              )
+              const guestNames = extras
+                .map((g) => g.name)
+                .filter(Boolean)
+                .join(', ')
+              const addr = addrById[m.id]
+              return (
+                <div
+                  key={m.id}
+                  className={`holiday-summary-card ${
+                    yes ? 'is-coming' : 'is-out'
+                  }`}
+                >
+                  <div className="holiday-summary-when">
+                    {m.date_label || m.date || ''}
+                  </div>
+                  <strong>{m.label}</strong>
+                  <div className={`holiday-summary-status ${yes ? 'yes' : 'no'}`}>
+                    {yes ? 'You are coming' : 'Not this meal'}
+                  </div>
+                  {yes && (
+                    <div className="meta">
+                      {guestCount
+                        ? `Guests: ${guestCount}${guestNames ? ` · ${guestNames}` : ''}`
+                        : 'No extra guests'}
+                    </div>
+                  )}
+                  {yes && addr?.host_name && (
+                    <div className="meta">Host: {addr.host_name}</div>
+                  )}
+                  {yes && addr?.address && (
+                    <div className="meta" style={{ whiteSpace: 'pre-wrap' }}>
+                      {addr.address}
+                    </div>
+                  )}
+                  {yes && addr?.notes && (
+                    <div className="meta">{addr.notes}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div className="holiday-summary-help">
+        <h3>Help</h3>
+        <div className="holiday-summary-grid holiday-summary-help-grid">
+          <div className="holiday-summary-card">
+            <strong>Donate</strong>
+            <div className="meta">
+              {help.donate
+                ? help.amount
+                  ? `Yes · ${help.amount}`
+                  : 'Yes'
+                : 'No'}
+            </div>
+          </div>
+          <div className="holiday-summary-card">
+            <strong>Potluck</strong>
+            <div className="meta">{help.potluck ? 'Yes' : 'No'}</div>
+          </div>
+          <div className="holiday-summary-card">
+            <strong>Clean</strong>
+            <div className="meta">{help.clean ? 'Yes' : 'No'}</div>
+          </div>
+        </div>
+        {help.notes && (
+          <div className="holiday-summary-notes">{help.notes}</div>
         )}
       </div>
-      {help.notes && <div className="meta">{help.notes}</div>}
     </div>
   )
 }
@@ -992,6 +1074,7 @@ export default function HolidayPage() {
               <HolidaySubmissionSummary
                 rsvp={existing}
                 hostedMeals={hostedMeals}
+                addresses={addresses}
               />
               <div className="actions">
                 <button
@@ -1027,32 +1110,13 @@ export default function HolidayPage() {
               <HolidaySubmissionSummary
                 rsvp={existing}
                 hostedMeals={hostedMeals}
+                addresses={addresses}
               />
-              <h2 style={{ marginTop: '1rem' }}>Addresses & hosts</h2>
-              {addresses.length === 0 ? (
+              {addresses.length === 0 && (
                 <p className="hint">
-                  Addresses will show here once the host adds them in Admin.
+                  Host names and addresses will show on each meal box once the
+                  host adds them in Admin.
                 </p>
-              ) : (
-                <div className="list">
-                  {addresses.map((a) => (
-                    <div className="rsvp-row" key={a.id}>
-                      <strong>{formatMealLabel(a)}</strong>
-                      {a.host_name && (
-                        <div className="meta">Host: {a.host_name}</div>
-                      )}
-                      {a.address && (
-                        <div
-                          className="meta"
-                          style={{ whiteSpace: 'pre-wrap' }}
-                        >
-                          {a.address}
-                        </div>
-                      )}
-                      {a.notes && <div className="meta">{a.notes}</div>}
-                    </div>
-                  ))}
-                </div>
               )}
               <div className="actions">
                 <button
@@ -1377,33 +1441,13 @@ export default function HolidayPage() {
               <HolidaySubmissionSummary
                 rsvp={existing}
                 hostedMeals={hostedMeals}
+                addresses={addresses}
               />
-              <h2 style={{ marginTop: '1rem' }}>Addresses & hosts</h2>
-              {addresses.length === 0 ? (
+              {addresses.length === 0 && (
                 <p className="hint">
-                  Addresses will show here once the host adds them in Admin.
-                  Your meal choices are saved.
+                  Host names and addresses will show on each meal box once the
+                  host adds them in Admin.
                 </p>
-              ) : (
-                <div className="list">
-                  {addresses.map((a) => (
-                    <div className="rsvp-row" key={a.id}>
-                      <strong>{formatMealLabel(a)}</strong>
-                      {a.host_name && (
-                        <div className="meta">Host: {a.host_name}</div>
-                      )}
-                      {a.address && (
-                        <div
-                          className="meta"
-                          style={{ whiteSpace: 'pre-wrap' }}
-                        >
-                          {a.address}
-                        </div>
-                      )}
-                      {a.notes && <div className="meta">{a.notes}</div>}
-                    </div>
-                  ))}
-                </div>
               )}
               <div className="actions">
                 <button
