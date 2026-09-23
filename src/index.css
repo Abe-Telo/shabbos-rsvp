@@ -709,13 +709,105 @@ button.meal-cal-opt {
 
 .holiday-food-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
 }
 
+.holiday-food-copy {
+  min-width: 0;
+  flex: 1;
+}
+
 .holiday-food-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
   flex-shrink: 0;
+}
+
+.holiday-food-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.holiday-food-thumbs img {
+  width: 3.2rem;
+  height: 3.2rem;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.holiday-food-votes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.food-icon-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.food-icon-btn input {
+  display: none;
+}
+
+.food-icon-btn:hover,
+.food-icon-btn.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(196, 92, 38, 0.08);
+}
+
+.holiday-food-score {
+  appearance: none;
+  min-width: 1.6rem;
+  padding: 0.15rem 0.25rem;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.holiday-food-voters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+  background: rgba(243, 235, 224, 0.7);
+  font-size: 0.84rem;
+}
+
+.holiday-food-voters strong {
+  display: block;
+  font-size: 0.78rem;
+  margin-bottom: 0.2rem;
+}
+
+.holiday-food-voters span,
+.holiday-food-voters em {
+  display: block;
+  color: var(--ink-muted);
 }
 
 .holiday-food-add {

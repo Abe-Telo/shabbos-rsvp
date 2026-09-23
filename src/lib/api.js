@@ -1372,6 +1372,8 @@ export async function saveHolidayFoodItem(payload) {
       covered_by: coveredBy || null,
       phone: payload.phone || null,
       notes: payload.notes || null,
+      photos: [],
+      votes: [],
       created_at: new Date().toISOString(),
     }
     data.holiday_food_items.push(existing)
@@ -1403,6 +1405,32 @@ export async function updateHolidayFoodItem(id, patch) {
     }
     if (patch.item_name !== undefined || patch.itemName !== undefined) {
       item.item_name = String(patch.item_name ?? patch.itemName ?? '').trim() || item.item_name
+    }
+  }
+  if (patch.photos !== undefined) {
+    item.photos = Array.isArray(patch.photos) ? patch.photos : []
+  } else if (patch.add_photos || patch.addPhotos) {
+    item.photos = [
+      ...(item.photos || []),
+      ...(patch.add_photos || patch.addPhotos || []),
+    ].slice(0, 8)
+  }
+  if (patch.vote && typeof patch.vote === 'object') {
+    const name = String(patch.vote.name || '').trim()
+    const value = Number(patch.vote.value)
+    if (!name) throw new Error('Enter your name to vote')
+    if (value !== 1 && value !== -1) throw new Error('Vote must be up or down')
+    item.votes = Array.isArray(item.votes) ? item.votes : []
+    const key = name.toLowerCase()
+    const idx = item.votes.findIndex(
+      (v) => String(v.name || '').toLowerCase() === key,
+    )
+    if (idx >= 0 && Number(item.votes[idx].value) === value) {
+      item.votes.splice(idx, 1)
+    } else if (idx >= 0) {
+      item.votes[idx] = { name, value, at: new Date().toISOString() }
+    } else {
+      item.votes.push({ name, value, at: new Date().toISOString() })
     }
   }
   saveLocal(data)

@@ -922,6 +922,27 @@ function publicHolidayRsvp(row) {
   return rest
 }
 
+function applyHolidayFoodVote(item, body) {
+  const vote = body?.vote
+  if (!vote || typeof vote !== 'object') return
+  const name = String(vote.name || vote.fullName || vote.full_name || '').trim()
+  if (!name) throw new Error('Enter your name to vote')
+  const value = Number(vote.value)
+  if (value !== 1 && value !== -1) throw new Error('Vote must be up or down')
+  item.votes = Array.isArray(item.votes) ? item.votes : []
+  const key = name.toLowerCase()
+  const idx = item.votes.findIndex(
+    (v) => String(v.name || '').toLowerCase() === key,
+  )
+  if (idx >= 0 && Number(item.votes[idx].value) === value) {
+    item.votes.splice(idx, 1)
+  } else if (idx >= 0) {
+    item.votes[idx] = { name, value, at: new Date().toISOString() }
+  } else {
+    item.votes.push({ name, value, at: new Date().toISOString() })
+  }
+}
+
 function holidayFoodFor(db, holidayId, mealId) {
   return (db.holiday_food_items || [])
     .filter(
@@ -1072,6 +1093,8 @@ app.post('/holiday/food', (req, res) => {
       covered_by: coveredBy || null,
       phone: String(body.phone || '').trim() || null,
       notes: String(body.notes || '').trim() || null,
+      photos: [],
+      votes: [],
       created_at: new Date().toISOString(),
     }
     db.holiday_food_items.push(item)
@@ -1108,6 +1131,13 @@ app.patch('/holiday/food/:id', (req, res) => {
       item.covered_by = null
       item.phone = null
     }
+    if (body.photos !== undefined) {
+      item.photos = persistFoodPhotos(body.photos)
+    } else if (Array.isArray(body.add_photos) || Array.isArray(body.addPhotos)) {
+      const extra = persistFoodPhotos(body.add_photos || body.addPhotos || [])
+      item.photos = [...(item.photos || []), ...extra].slice(0, 8)
+    }
+    applyHolidayFoodVote(item, body)
     saveDb(db)
     const { phone, ...pub } = item
     res.json({

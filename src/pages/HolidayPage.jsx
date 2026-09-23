@@ -9,6 +9,7 @@ import {
   submitHolidayRsvp,
   updateHolidayFoodItem,
 } from '../lib/api'
+import { fileToFoodPhotoData } from '../lib/auth'
 import { HOST_PAYMENT } from '../lib/formConfig'
 import { formatMealLabel } from '../lib/jewishHolidays'
 import { loadRememberedForm, saveRememberedForm } from '../lib/localProfile'
@@ -538,6 +539,178 @@ function AttendanceTab({ summary, hostedMeals, holiday }) {
   )
 }
 
+function foodPhotoSrc(p) {
+  if (!p) return ''
+  return typeof p === 'string' ? p : p.url || ''
+}
+
+function voteScore(votes) {
+  return (votes || []).reduce((n, v) => n + (Number(v.value) === -1 ? -1 : Number(v.value) === 1 ? 1 : 0), 0)
+}
+
+function CameraIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M9 3h6l1.5 2H20a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3.5L9 3zm3 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2.2A2.8 2.8 0 1 1 12 16a2.8 2.8 0 0 1 0-5.8z"
+      />
+    </svg>
+  )
+}
+
+function ChevronUpIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M7.4 15.4 12 10.8l4.6 4.6L18 14l-6-6-6 6z" />
+    </svg>
+  )
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z" />
+    </svg>
+  )
+}
+
+function HolidayFoodRow({
+  item,
+  suggestionName,
+  coverName,
+  busy,
+  onClaim,
+  onClear,
+  onVote,
+  onAddPhotos,
+  votersOpen,
+  onToggleVoters,
+}) {
+  const name = item?.item_name || suggestionName
+  const votes = item?.votes || []
+  const photos = (item?.photos || []).filter(foodPhotoSrc)
+  const covered = Boolean(item?.covered_by)
+  const score = voteScore(votes)
+  const myName = String(coverName || '').trim().toLowerCase()
+  const mine = votes.find((v) => String(v.name || '').toLowerCase() === myName)
+  const ups = votes.filter((v) => Number(v.value) === 1)
+  const downs = votes.filter((v) => Number(v.value) === -1)
+
+  return (
+    <div className="rsvp-row holiday-food-row">
+      <div className="holiday-food-copy">
+        <strong>{name}</strong>
+        <div className="meta">
+          {covered
+            ? `Covered by ${item.covered_by}`
+            : item
+              ? 'Still needed'
+              : 'Not claimed yet'}
+        </div>
+        {photos.length > 0 && (
+          <div className="holiday-food-thumbs">
+            {photos.map((p, i) => (
+              <img
+                key={p.id || foodPhotoSrc(p) || i}
+                src={foodPhotoSrc(p)}
+                alt=""
+              />
+            ))}
+          </div>
+        )}
+        {votersOpen && (
+          <div className="holiday-food-voters">
+            <div>
+              <strong>Like</strong>
+              {ups.length
+                ? ups.map((v) => <span key={`up-${v.name}`}>{v.name}</span>)
+                : <em>No likes yet</em>}
+            </div>
+            <div>
+              <strong>Not for me</strong>
+              {downs.length
+                ? downs.map((v) => <span key={`down-${v.name}`}>{v.name}</span>)
+                : <em>No down votes</em>}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="holiday-food-actions">
+        {covered ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={Boolean(busy)}
+            onClick={onClear}
+          >
+            Clear
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-accent"
+            disabled={Boolean(busy)}
+            onClick={onClaim}
+          >
+            {busy === name || busy === item?.id ? 'Saving…' : "I'll cover"}
+          </button>
+        )}
+        {covered && (
+          <label
+            className="food-icon-btn"
+            title="Add a photo"
+            aria-label="Add a photo"
+          >
+            <CameraIcon />
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              disabled={Boolean(busy) || photos.length >= 8}
+              onChange={(e) => {
+                onAddPhotos([...(e.target.files || [])])
+                e.target.value = ''
+              }}
+            />
+          </label>
+        )}
+        <div className="holiday-food-votes">
+          <button
+            type="button"
+            className={`food-icon-btn${mine?.value === 1 ? ' is-on' : ''}`}
+            title="I like this"
+            aria-label="Vote up"
+            disabled={Boolean(busy)}
+            onClick={() => onVote(1)}
+          >
+            <ChevronUpIcon />
+          </button>
+          <button
+            type="button"
+            className="holiday-food-score"
+            title="See who voted"
+            onClick={onToggleVoters}
+          >
+            {score}
+          </button>
+          <button
+            type="button"
+            className={`food-icon-btn${mine?.value === -1 ? ' is-on' : ''}`}
+            title="Not for me"
+            aria-label="Vote down"
+            disabled={Boolean(busy)}
+            onClick={() => onVote(-1)}
+          >
+            <ChevronDownIcon />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FoodTab({
   hostedMeals,
   foodMealId,
@@ -550,6 +723,7 @@ function FoodTab({
   const [coverName, setCoverName] = useState(defaultName || '')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [votersOpen, setVotersOpen] = useState('')
 
   useEffect(() => {
     if (defaultName) setCoverName((prev) => prev.trim() || defaultName)
@@ -612,6 +786,57 @@ function FoodTab({
     }
   }
 
+  async function ensureItem(item, itemName) {
+    if (item?.id) return item
+    const result = await saveHolidayFoodItem({
+      meal_id: activeMeal.id,
+      item_name: itemName,
+      covered_by: '',
+    })
+    return result.item
+  }
+
+  async function voteOn(item, itemName, value) {
+    const who = coverName.trim()
+    if (!who) {
+      setError('Enter your name to vote.')
+      return
+    }
+    setBusy(item?.id || itemName)
+    setError('')
+    try {
+      const saved = await ensureItem(item, itemName)
+      await updateHolidayFoodItem(saved.id, { vote: { name: who, value } })
+      await onRefresh(activeMeal.id)
+    } catch (e) {
+      setError(e.message || 'Could not vote')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function addPhotos(item, files) {
+    if (!files?.length || !item?.id) return
+    setBusy(item.id)
+    setError('')
+    try {
+      const added = []
+      for (const file of files) {
+        if (added.length + (item.photos || []).length >= 8) break
+        const url = await fileToFoodPhotoData(file)
+        added.push({ id: crypto.randomUUID(), url, caption: '' })
+      }
+      if (added.length) {
+        await updateHolidayFoodItem(item.id, { add_photos: added })
+        await onRefresh(activeMeal.id)
+      }
+    } catch (e) {
+      setError(e.message || 'Could not add photo')
+    } finally {
+      setBusy('')
+    }
+  }
+
   if (!hostedMeals.length) {
     return (
       <div className="panel">
@@ -655,39 +880,20 @@ function FoodTab({
 
       <div className="list">
         {(foodItems || []).map((it) => (
-          <div className="rsvp-row holiday-food-row" key={it.id}>
-            <div>
-              <strong>{it.item_name}</strong>
-              <div className="meta">
-                {it.covered_by
-                  ? `Covered by ${it.covered_by}`
-                  : 'Still needed'}
-              </div>
-            </div>
-            <div className="holiday-food-actions">
-              {!it.covered_by ? (
-                <button
-                  type="button"
-                  className="btn btn-accent"
-                  disabled={Boolean(busy)}
-                  onClick={() => claim(it.item_name, it.id)}
-                >
-                  {busy === it.item_name || busy === it.id
-                    ? 'Saving…'
-                    : "I'll cover"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={Boolean(busy)}
-                  onClick={() => clearCover(it.id)}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
+          <HolidayFoodRow
+            key={it.id}
+            item={it}
+            coverName={coverName}
+            busy={busy}
+            onClaim={() => claim(it.item_name, it.id)}
+            onClear={() => clearCover(it.id)}
+            onVote={(value) => voteOn(it, it.item_name, value)}
+            onAddPhotos={(files) => addPhotos(it, files)}
+            votersOpen={votersOpen === it.id}
+            onToggleVoters={() =>
+              setVotersOpen((prev) => (prev === it.id ? '' : it.id))
+            }
+          />
         ))}
       </div>
 
@@ -725,20 +931,19 @@ function FoodTab({
           </h3>
           <div className="list">
             {suggestions.map((name) => (
-              <div className="rsvp-row holiday-food-row" key={name}>
-                <div>
-                  <strong>{name}</strong>
-                  <div className="meta">Not claimed yet</div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-accent"
-                  disabled={Boolean(busy)}
-                  onClick={() => claim(name)}
-                >
-                  {busy === name ? 'Saving…' : "I'll cover"}
-                </button>
-              </div>
+              <HolidayFoodRow
+                key={name}
+                suggestionName={name}
+                coverName={coverName}
+                busy={busy}
+                onClaim={() => claim(name)}
+                onVote={(value) => voteOn(null, name, value)}
+                onAddPhotos={() => {}}
+                votersOpen={votersOpen === name}
+                onToggleVoters={() =>
+                  setVotersOpen((prev) => (prev === name ? '' : name))
+                }
+              />
             ))}
           </div>
         </>
