@@ -489,6 +489,19 @@ select {
   white-space: nowrap;
 }
 
+.coming-meal-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.15rem;
+  border-radius: 999px;
+  background: rgba(26, 36, 28, 0.1);
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
 .person-row-btn {
   width: 100%;
   text-align: left;

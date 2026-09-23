@@ -144,6 +144,17 @@ function sortMealsByHosted(ids, hostedMeals) {
   })
 }
 
+function mealNumber(id, hostedMeals) {
+  const idx = (hostedMeals || []).findIndex((m) => m.id === id)
+  if (idx >= 0) return idx + 1
+  const sorted = sortMealsByHosted(
+    (hostedMeals || []).map((m) => m.id).concat(id),
+    hostedMeals,
+  )
+  const fallback = sorted.indexOf(id)
+  return fallback >= 0 ? fallback + 1 : ''
+}
+
 function mealPeriod(id, hostedMeals) {
   const match = (hostedMeals || []).find((m) => m.id === id)
   if (match?.period === 'night' || match?.period === 'day') return match.period
@@ -461,6 +472,9 @@ function AttendanceTab({ summary, hostedMeals, holiday }) {
                         const period = mealPeriod(id, hostedMeals)
                         return (
                           <span className="coming-meal-pill" key={id}>
+                            <span className="coming-meal-num">
+                              {mealNumber(id, hostedMeals)}
+                            </span>
                             {period === 'night' ? (
                               <NightIcon size={13} />
                             ) : (
