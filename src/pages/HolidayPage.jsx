@@ -117,6 +117,33 @@ function PaymentBlock() {
   )
 }
 
+function mealOrderKey(id) {
+  const s = String(id || '')
+  const half = s.startsWith('sh-') ? 1 : 0
+  const raw = s.replace(/^sh-/, '')
+  const m = raw.match(/^([nd])(\d+)$/i)
+  if (!m) return [half, 99, 99, s]
+  const n = Number(m[2])
+  const period = m[1].toLowerCase() === 'n' ? 0 : 1
+  return [half, n, period, s]
+}
+
+function sortMealsByHosted(ids, hostedMeals) {
+  const order = new Map((hostedMeals || []).map((m, i) => [m.id, i]))
+  return [...(ids || [])].sort((a, b) => {
+    const ia = order.has(a) ? order.get(a) : 999
+    const ib = order.has(b) ? order.get(b) : 999
+    if (ia !== ib) return ia - ib
+    const ka = mealOrderKey(a)
+    const kb = mealOrderKey(b)
+    for (let i = 0; i < ka.length; i += 1) {
+      if (ka[i] < kb[i]) return -1
+      if (ka[i] > kb[i]) return 1
+    }
+    return 0
+  })
+}
+
 function mealPeriod(id, hostedMeals) {
   const match = (hostedMeals || []).find((m) => m.id === id)
   if (match?.period === 'night' || match?.period === 'day') return match.period
@@ -429,7 +456,7 @@ function AttendanceTab({ summary, hostedMeals, holiday }) {
                   <td>{p.total}</td>
                   <td title={(p.meals || []).join(', ')}>
                     <span className="coming-meal-pills">
-                      {(p.meals || []).map((id) => {
+                      {sortMealsByHosted(p.meals, hostedMeals).map((id) => {
                         const hosted = hostedMeals.find((m) => m.id === id)
                         const period = mealPeriod(id, hostedMeals)
                         return (
