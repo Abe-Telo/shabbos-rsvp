@@ -289,6 +289,7 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
 
 function AttendanceTab({ summary, hostedMeals }) {
   const people = summary?.people || []
+  const declined = summary?.declined || []
   const totals = summary?.totals || { number: 0, guests: 0, total: 0 }
   const meals = summary?.meals || []
 
@@ -348,6 +349,12 @@ function AttendanceTab({ summary, hostedMeals }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {declined.length > 0 && (
+        <p className="meta" style={{ marginTop: '0.85rem' }}>
+          Can&apos;t make it: {declined.map((p) => p.name).join(', ')}
+        </p>
       )}
 
       <h3
@@ -616,6 +623,7 @@ function mealHalfKey(meal) {
 
 function HolidaySubmissionSummary({ rsvp, hostedMeals, addresses = [] }) {
   if (!rsvp) return null
+  const declined = rsvp.coming === 'no' || !(rsvp.meals || []).length
   const coming = new Set(rsvp.meals || [])
   const help = rsvp.help || {}
   const addrById = Object.fromEntries((addresses || []).map((a) => [a.id, a]))
@@ -635,6 +643,11 @@ function HolidaySubmissionSummary({ rsvp, hostedMeals, addresses = [] }) {
       <div className="holiday-summary-who">
         <strong>{rsvp.full_name}</strong>
         {rsvp.phone && <div className="meta">{rsvp.phone}</div>}
+        {declined && (
+          <div className="banner banner-err" style={{ marginTop: '0.65rem' }}>
+            Can&apos;t make it — you are not on the meal list.
+          </div>
+        )}
       </div>
 
       {groups.map((group) => (
@@ -740,6 +753,7 @@ export default function HolidayPage() {
   )
   const [phone, setPhone] = useState(remembered.phone || user?.phone || '')
   const [selectedMeals, setSelectedMeals] = useState([])
+  const [cantMakeIt, setCantMakeIt] = useState(false)
   const [bringingGuests, setBringingGuests] = useState('No')
   const [guestByMeal, setGuestByMeal] = useState({})
   const [help, setHelp] = useState({
@@ -761,7 +775,9 @@ export default function HolidayPage() {
     if (!rsvp) return
     setFullName(rsvp.full_name || '')
     setPhone(rsvp.phone || phoneFallback || '')
-    setSelectedMeals([...(rsvp.meals || [])])
+    const declined = rsvp.coming === 'no' || !(rsvp.meals || []).length
+    setCantMakeIt(declined)
+    setSelectedMeals(declined ? [] : [...(rsvp.meals || [])])
     const byMeal = {}
     let anyGuests = false
     for (const g of rsvp.guests || []) {
@@ -875,9 +891,17 @@ export default function HolidayPage() {
   }, [foodMealId, holiday?.enabled])
 
   function toggleId(id, setList) {
+    setCantMakeIt(false)
     setList((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
+  }
+
+  function chooseCantMakeIt() {
+    setCantMakeIt(true)
+    setSelectedMeals([])
+    setBringingGuests('No')
+    setGuestByMeal({})
   }
 
   function setGuestField(mealId, field, value) {
@@ -952,13 +976,62 @@ export default function HolidayPage() {
     }
   }
 
+  async function submitCantMakeIt() {
+    if (!fullName.trim() || !phone.trim()) {
+      setError('Please enter your name and phone.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const result = await submitHolidayRsvp({
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        coming: 'no',
+        cantMakeIt: true,
+        meals: [],
+        guests: [],
+        help: {
+          donate: false,
+          potluck: false,
+          clean: false,
+          amount: '',
+          notes: help.notes || '',
+        },
+      })
+      saveRememberedForm({
+        ...remembered,
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+      })
+      setCantMakeIt(true)
+      setSelectedMeals([])
+      setAddresses(result.addresses || [])
+      if (result.rsvp) setExisting(result.rsvp)
+      setStep(STEPS.done)
+      try {
+        await refreshBoard()
+      } catch {
+        /* ignore */
+      }
+    } catch (e) {
+      setError(e.message || 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function goGuests() {
     if (!fullName.trim() || !phone.trim()) {
       setError('Please enter your name and phone.')
       return
     }
+    if (cantMakeIt) {
+      await submitCantMakeIt()
+      return
+    }
     if (!selectedMeals.length) {
-      setError('Pick at least one meal you need (night or day).')
+      setError('Pick at least one meal, or choose Can’t make it.')
       return
     }
     setError('')
@@ -1012,6 +1085,7 @@ export default function HolidayPage() {
       const result = await submitHolidayRsvp({
         fullName: fullName.trim(),
         phone: phone.trim(),
+        coming: 'yes',
         meals: selectedMeals,
         guests: guestsPayload(),
         help: {
@@ -1157,14 +1231,30 @@ export default function HolidayPage() {
                 >
                   Yes, I need to change it
                 </button>
+                {existing?.coming !== 'no' && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={saving}
+                    onClick={submitCantMakeIt}
+                  >
+                    {saving ? 'Saving…' : "Can't make it"}
+                  </button>
+                )}
               </div>
             </div>
           )}
 
           {step === STEPS.all_set && (
             <div className="panel">
-              <div className="banner banner-ok">
-                Your holiday RSVP is on file.
+              <div
+                className={`banner ${
+                  existing?.coming === 'no' ? 'banner-err' : 'banner-ok'
+                }`}
+              >
+                {existing?.coming === 'no'
+                  ? "You're marked as can't make it."
+                  : 'Your holiday RSVP is on file.'}
               </div>
               <HolidaySubmissionSummary
                 rsvp={existing}
@@ -1239,17 +1329,33 @@ export default function HolidayPage() {
                   Meals <span className="req">*</span>
                 </label>
                 <div className="choices">
+                  <label className="choice">
+                    <input
+                      type="checkbox"
+                      checked={cantMakeIt}
+                      onChange={(e) => {
+                        if (e.target.checked) chooseCantMakeIt()
+                        else setCantMakeIt(false)
+                      }}
+                    />
+                    <span>Can&apos;t make it</span>
+                  </label>
                   {hostedMeals.map((m) => (
                     <label className="choice" key={m.id}>
                       <input
                         type="checkbox"
-                        checked={selectedMeals.includes(m.id)}
+                        checked={!cantMakeIt && selectedMeals.includes(m.id)}
+                        disabled={cantMakeIt}
                         onChange={() => toggleId(m.id, setSelectedMeals)}
                       />
                       <span>{formatMealLabel(m)}</span>
                     </label>
                   ))}
                 </div>
+                <p className="hint" style={{ marginTop: '0.4rem' }}>
+                  Choose Can&apos;t make it if you need to cancel after already
+                  RSVPing.
+                </p>
               </div>
               {!hostedMeals.length && (
                 <div className="empty">No hosted meals are set up yet.</div>
@@ -1268,8 +1374,13 @@ export default function HolidayPage() {
                   type="button"
                   className="btn btn-primary"
                   onClick={goGuests}
+                  disabled={saving}
                 >
-                  Continue
+                  {saving
+                    ? 'Saving…'
+                    : cantMakeIt
+                      ? 'Save — can’t make it'
+                      : 'Continue'}
                 </button>
               </div>
             </div>
@@ -1492,10 +1603,16 @@ export default function HolidayPage() {
 
           {step === STEPS.done && (
             <div className="panel">
-              <div className="banner banner-ok">
-                {existing
-                  ? 'Your holiday RSVP was updated.'
-                  : "You're on the holiday list."}
+              <div
+                className={`banner ${
+                  existing?.coming === 'no' ? 'banner-err' : 'banner-ok'
+                }`}
+              >
+                {existing?.coming === 'no'
+                  ? "Saved — you can't make it."
+                  : existing
+                    ? 'Your holiday RSVP was updated.'
+                    : "You're on the holiday list."}
               </div>
               <HolidaySubmissionSummary
                 rsvp={existing}

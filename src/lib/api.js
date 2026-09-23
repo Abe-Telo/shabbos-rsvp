@@ -1023,8 +1023,14 @@ function holidayAddressesLocal(event, mealIds) {
 
 function holidaySummaryLocal(data) {
   const event = normalizeHolidayEventLocal(data.holiday_event)
-  const rows = (data.holiday_rsvps || []).filter(
+  const allRows = (data.holiday_rsvps || []).filter(
     (r) => r.holiday_id === event.holiday_id,
+  )
+  const declined = allRows.filter(
+    (r) => r.coming === 'no' || !(r.meals || []).length,
+  )
+  const rows = allRows.filter(
+    (r) => r.coming !== 'no' && (r.meals || []).length > 0,
   )
   const byMeal = {}
   for (const m of (event.meals || []).filter((x) => x.hosted !== false)) {
@@ -1071,6 +1077,7 @@ function holidaySummaryLocal(data) {
     enabled: event.enabled,
     meals: Object.values(byMeal),
     rsvp_count: rows.length,
+    declined: declined.map((r) => ({ id: r.id, name: r.full_name })),
     people: rows.map((r) => {
       const guestByMeal = {}
       for (const g of r.guests || []) {
@@ -1203,12 +1210,16 @@ export async function submitHolidayRsvp(form) {
   const hostedIds = new Set(
     (event.meals || []).filter((m) => m.hosted !== false).map((m) => m.id),
   )
-  const meals = (form.meals || []).map(String).filter((id) => hostedIds.has(id))
-  if (!meals.length) throw new Error('Select at least one meal')
+  const coming = form.coming === 'no' || form.cantMakeIt === true ? 'no' : 'yes'
+  const meals =
+    coming === 'no'
+      ? []
+      : (form.meals || []).map(String).filter((id) => hostedIds.has(id))
+  if (coming === 'yes' && !meals.length) throw new Error('Select at least one meal')
   const person = await upsertPersonLocal({
     fullName: form.fullName,
     phone: form.phone,
-    coming: 'yes',
+    coming,
     foodLikes: [],
   })
   const guests = (form.guests || [])
@@ -1232,8 +1243,9 @@ export async function submitHolidayRsvp(form) {
     holiday_id: event.holiday_id,
     full_name: form.fullName.trim(),
     phone: form.phone.trim(),
+    coming,
     meals,
-    guests,
+    guests: coming === 'no' ? [] : guests,
     help: {
       donate: Boolean(form.help?.donate),
       potluck: Boolean(form.help?.potluck),

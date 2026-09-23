@@ -1030,6 +1030,10 @@ export default function AdminPage() {
           id: r.id,
           name: r.full_name || '',
           phone: r.phone || '',
+          coming:
+            r.coming === 'no' || !(r.meals || []).length
+              ? "Can't make it"
+              : 'Yes',
           meals: (r.meals || []).map(labelOf).join(', ') || '—',
           guests: allGuests || '—',
           donate: help.donate
@@ -1093,6 +1097,7 @@ export default function AdminPage() {
       return [
         { key: 'name', label: 'Name' },
         { key: 'phone', label: 'Phone' },
+        { key: 'coming', label: 'Coming' },
         { key: 'seats', label: 'Seats' },
         { key: 'guest_count', label: 'Extra guests' },
         { key: 'guests', label: 'Guest names', wrap: true },
@@ -1114,6 +1119,7 @@ export default function AdminPage() {
     return [
       { key: 'name', label: 'Name' },
       { key: 'phone', label: 'Phone' },
+      { key: 'coming', label: 'Coming' },
       ...mealCols,
       { key: 'donate', label: 'Donate' },
       { key: 'potluck', label: 'Potluck' },

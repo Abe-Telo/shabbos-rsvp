@@ -814,7 +814,15 @@ function mealAddressesForIds(event, mealIds) {
 function holidaySeatSummary(db, holidayId) {
   const event = normalizeHolidayEvent(db.holiday_event)
   const rows = (db.holiday_rsvps || []).filter(
-    (r) => !holidayId || r.holiday_id === holidayId,
+    (r) =>
+      (!holidayId || r.holiday_id === holidayId) &&
+      r.coming !== 'no' &&
+      (r.meals || []).length > 0,
+  )
+  const declined = (db.holiday_rsvps || []).filter(
+    (r) =>
+      (!holidayId || r.holiday_id === holidayId) &&
+      (r.coming === 'no' || !(r.meals || []).length),
   )
   const byMeal = {}
   for (const m of event.meals.filter((x) => x.hosted)) {
@@ -865,6 +873,10 @@ function holidaySeatSummary(db, holidayId) {
     enabled: event.enabled,
     meals: Object.values(byMeal),
     rsvp_count: rows.length,
+    declined: declined.map((r) => ({
+      id: r.id,
+      name: r.full_name,
+    })),
     people: rows.map((r) => {
       const guestByMeal = {}
       for (const g of r.guests || []) {
@@ -1122,14 +1134,22 @@ app.post('/holiday/rsvps', (req, res) => {
       return res.status(400).json({ error: 'Holiday RSVP is not open right now' })
     }
     const hostedIds = new Set(event.meals.filter((m) => m.hosted).map((m) => m.id))
-    const meals = Array.isArray(body.meals)
-      ? [...new Set(body.meals.map(String))].filter((id) => hostedIds.has(id))
-      : []
-    if (!meals.length) {
+    const coming =
+      body.coming === 'no' || body.cantMakeIt === true ? 'no' : 'yes'
+    const meals =
+      coming === 'no'
+        ? []
+        : Array.isArray(body.meals)
+          ? [...new Set(body.meals.map(String))].filter((id) => hostedIds.has(id))
+          : []
+    if (coming === 'yes' && !meals.length) {
       return res.status(400).json({ error: 'Select at least one meal' })
     }
 
-    const guests = Array.isArray(body.guests)
+    const guests =
+      coming === 'no'
+        ? []
+        : Array.isArray(body.guests)
       ? body.guests
           .map((g) => ({
             name: String(g.name || '').trim(),
@@ -1153,7 +1173,7 @@ app.post('/holiday/rsvps', (req, res) => {
     const person = upsertPerson(db, {
       fullName,
       phone,
-      coming: 'yes',
+      coming,
       weekStart: currentSunday(),
       foodLikes: [],
     })
@@ -1178,6 +1198,7 @@ app.post('/holiday/rsvps', (req, res) => {
       holiday_id: event.holiday_id,
       full_name: fullName,
       phone,
+      coming,
       meals,
       guests,
       help,
