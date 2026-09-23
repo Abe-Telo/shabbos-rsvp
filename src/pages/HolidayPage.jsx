@@ -376,18 +376,20 @@ function CalendarTab({ holiday, summary, hostedMeals }) {
   )
 }
 
-function AttendanceTab({ summary, hostedMeals }) {
+function AttendanceTab({ summary, hostedMeals, holiday }) {
   const people = summary?.people || []
   const declined = summary?.declined || []
   const totals = summary?.totals || { number: 0, guests: 0, total: 0 }
   const meals = summary?.meals || []
+  const holidayTitle = holiday?.title || 'Holiday'
 
   return (
     <div className="panel">
       <h2>Who&apos;s coming</h2>
+      <p className="holiday-coming-name">{holidayTitle}</p>
       <p className="hint">
         Guests = most extras at any one meal for that person. Meal breakdown
-        below shows exact seats per night/day.
+        below shows exact seats per night/day. Sun is day, moon is night.
       </p>
       <div className="stats">
         <div className="stat">
@@ -426,12 +428,22 @@ function AttendanceTab({ summary, hostedMeals }) {
                   <td>{p.guests}</td>
                   <td>{p.total}</td>
                   <td title={(p.meals || []).join(', ')}>
-                    {(p.meals || [])
-                      .map(
-                        (id) =>
-                          hostedMeals.find((m) => m.id === id)?.label || id,
-                      )
-                      .join(', ')}
+                    <span className="coming-meal-pills">
+                      {(p.meals || []).map((id) => {
+                        const hosted = hostedMeals.find((m) => m.id === id)
+                        const period = mealPeriod(id, hostedMeals)
+                        return (
+                          <span className="coming-meal-pill" key={id}>
+                            {period === 'night' ? (
+                              <NightIcon size={13} />
+                            ) : (
+                              <SunIcon size={13} />
+                            )}
+                            {occasionNameForMeal(hosted || { id }, holidayTitle)}
+                          </span>
+                        )
+                      })}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -458,10 +470,11 @@ function AttendanceTab({ summary, hostedMeals }) {
       <div className="list">
         {meals.map((m) => (
           <div className="rsvp-row" key={m.meal_id}>
-            <strong>
-              {m.label}
-              {m.date_label ? ` · ${m.date_label}` : ''}
-            </strong>
+            <MealSittingHeading
+              meal={m}
+              hostedMeals={hostedMeals}
+              holidayTitle={holidayTitle}
+            />
             <div className="meta">
               {m.self_count} coming · {m.guest_count} guest seats · {m.total}{' '}
               total
@@ -737,6 +750,52 @@ function calendarDayParts(iso, fallback = '') {
 
 function occasionForDate(iso) {
   return SUKKOT_5787_CALENDAR.days.find((d) => d.date === iso)?.note || ''
+}
+
+const SUKKOT_MEAL_OCCASIONS = {
+  n1: 'Erev Sukkos',
+  d1: 'Sukkos 1 / Shabbos',
+  n2: 'Second night of Sukkos',
+  d2: 'Sukkos 2',
+  'sh-n1': 'Shemini Atzeres night',
+  'sh-d1': 'Shemini Atzeres / Shabbos',
+  'sh-n2': 'Simchas Torah night',
+  'sh-d2': 'Simchas Torah',
+}
+
+function occasionNameForMeal(meal, holidayTitle) {
+  const id = String(meal?.id || meal?.meal_id || '')
+  if (SUKKOT_MEAL_OCCASIONS[id]) return SUKKOT_MEAL_OCCASIONS[id]
+  return (
+    occasionForDate(meal?.date) ||
+    holidayTitle ||
+    shortMealName(meal) ||
+    'Holiday meal'
+  )
+}
+
+function MealSittingHeading({ meal, hostedMeals, holidayTitle }) {
+  const hosted =
+    (hostedMeals || []).find((m) => m.id === (meal?.id || meal?.meal_id)) ||
+    meal ||
+    {}
+  const period = mealPeriod(hosted.id || meal?.meal_id, hostedMeals)
+  const occasion = occasionNameForMeal(hosted, holidayTitle)
+  const sitting = period === 'night' ? 'Night' : period === 'day' ? 'Day' : ''
+  const when = hosted.date_label || meal?.date_label || ''
+  return (
+    <span className="meal-sitting-head">
+      <span className={`meal-cal-opt-icon ${period || 'day'}`}>
+        {period === 'night' ? <NightIcon size={16} /> : <SunIcon size={16} />}
+      </span>
+      <span className="meal-sitting-copy">
+        <strong>{occasion}</strong>
+        <span className="meta">
+          {[sitting, when].filter(Boolean).join(' · ')}
+        </span>
+      </span>
+    </span>
+  )
 }
 
 function groupMealsForCalendar(meals) {
@@ -1395,7 +1454,11 @@ export default function HolidayPage() {
       )}
 
       {mainTab === 'coming' && holiday?.enabled && (
-        <AttendanceTab summary={summary} hostedMeals={hostedMeals} />
+        <AttendanceTab
+          summary={summary}
+          hostedMeals={hostedMeals}
+          holiday={holiday}
+        />
       )}
 
       {mainTab === 'calendar' && holiday?.enabled && (
