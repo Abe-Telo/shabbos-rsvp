@@ -664,13 +664,24 @@ button.meal-cal-opt {
 
 .meal-cal-nav .meal-cal-week {
   gap: 0.5rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .meal-cal-nav .meal-cal-day {
   min-height: 0;
-  padding: 0.55rem 0.55rem 0.5rem;
+  padding: 0.5rem 0.6rem 0.5rem;
   gap: 0.4rem;
+}
+
+.meal-cal-nav .meal-cal-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.meal-cal-nav .meal-cal-when {
+  flex-shrink: 0;
 }
 
 .meal-cal-nav .meal-cal-num {
@@ -679,10 +690,17 @@ button.meal-cal-opt {
 
 .meal-cal-nav .meal-cal-day-head strong {
   font-size: 0.8rem;
+  font-weight: 650;
+  text-align: right;
+  line-height: 1.25;
+}
+
+.meal-cal-nav .meal-cal-day.has-both .meal-cal-options {
+  grid-template-columns: 1fr 1fr;
 }
 
 .meal-cal-nav .meal-cal-opt {
-  padding: 0.38rem 0.45rem;
+  padding: 0.4rem 0.5rem;
 }
 
 .meal-cal-nav .meal-cal-opt-text {
